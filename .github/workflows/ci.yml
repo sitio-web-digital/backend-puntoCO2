@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Gates secuenciales (CLAUDE.md): lint → typecheck → tests → security scan → build.
+# El deploy no está incluido: requiere decidir el proveedor de hosting y
+# configurar sus secretos (Vercel token, DB de producción, etc.), algo que
+# todavía no está resuelto — agregar ese job cuando exista esa configuración.
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: matafuego
+          POSTGRES_PASSWORD: matafuego_ci_only
+          POSTGRES_DB: matafuego_saas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U matafuego -d matafuego_saas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Rol dueño de las tablas (superusuario del contenedor efímero de CI):
+      # sólo lo usa Prisma CLI para migrar, nunca la app — mismo esquema que
+      # local dev, ver .env.example.
+      DATABASE_URL: postgresql://matafuego:matafuego_ci_only@localhost:5432/matafuego_saas?schema=public
+      # Password fijo de sólo-CI para app_user (efímero, se destruye con el
+      # contenedor al terminar el job) — RLS exige que la app corra con este
+      # rol de mínimo privilegio, nunca con el superusuario de arriba.
+      RUNTIME_DATABASE_URL: postgresql://app_user:app_user_ci_only@localhost:5432/matafuego_saas?schema=public
+      AUTH_SECRET: ci-only-secret-not-used-in-production
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Aplicar migraciones
+        run: npx prisma migrate deploy
+      - name: Fijar contraseña de app_user (rol de mínimo privilegio, RLS)
+        run: |
+          PGPASSWORD=matafuego_ci_only psql -h localhost -U matafuego -d matafuego_saas \
+            -c "ALTER ROLE app_user WITH PASSWORD 'app_user_ci_only'"
+      - run: npm run test
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Sin cuenta de Snyk configurada todavía: `npm audit` no requiere
+      # credenciales y ya cubre el mismo tipo de hallazgo (dependencias con
+      # vulnerabilidades conocidas). Sumar Snyk más adelante es cuestión de
+      # agregar su token como secret y un paso más acá, sin tocar el resto
+      # del pipeline.
+      - run: npm audit --audit-level=high
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    env:
+      # next build no toca la base de datos, pero sí instancia el cliente de
+      # Prisma en algunos módulos a nivel de import — una URL con formato
+      # válido alcanza, no hace falta una base real para este job.
+      DATABASE_URL: postgresql://matafuego:matafuego_ci_only@localhost:5432/matafuego_saas?schema=public
+      RUNTIME_DATABASE_URL: postgresql://app_user:app_user_ci_only@localhost:5432/matafuego_saas?schema=public
+      AUTH_SECRET: ci-only-secret-not-used-in-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build

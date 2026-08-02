@@ -1,0 +1,1359 @@
+// Convenciones de este schema:
+// - Toda tabla de negocio lleva tenantId + índice, incluso cuando la relación con Tenant
+//   ya lo implica, porque el wrapper de acceso a datos (src/server/db/tenant-client.ts)
+//   filtra por esta columna en cada query como defensa en profundidad junto a RLS.
+// - Las bajas son lógicas vía campo `estado`, nunca DELETE físico, para preservar
+//   trazabilidad de órdenes/certificados/facturas ligadas.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Plataforma SaaS / Tenancy (RF-28)
+// ============================================================================
+
+enum EstadoTenant {
+  TRIAL
+  ACTIVO
+  SUSPENDIDO
+  VENCIDO
+  CANCELADO
+}
+
+model Tenant {
+  id        String       @id @default(cuid())
+  nombre    String
+  slug      String       @unique
+  cuit      String?
+  estado    EstadoTenant @default(TRIAL)
+  plan      String       @default("trial")
+  limites   Json? // { maxUsuarios, maxEquipos, almacenamientoMB, funcionesHabilitadas: [] }
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  usuarios                 Usuario[]
+  roles                    Rol[]
+  auditLogs                AuditLog[]
+  clientes                 Cliente[]
+  contactosCliente         ContactoCliente[]
+  establecimientos         Establecimiento[]
+  sectores                 Sector[]
+  ubicaciones              Ubicacion[]
+  matafuegos               Matafuego[]
+  movimientoMatafuegos     MovimientoMatafuego[]
+  inspecciones             Inspeccion[]
+  noConformidades          NoConformidad[]
+  reglaMantenimientos      ReglaMantenimiento[]
+  mantenimientoProgramados MantenimientoProgramado[]
+  servicios                Servicio[]
+  listaPrecios             ListaPrecio[]
+  precioServicios          PrecioServicio[]
+  ordenesTrabajo           OrdenTrabajo[]
+  ordenTrabajoUnidades     OrdenTrabajoUnidad[]
+  ordenTrabajoItems        OrdenTrabajoItem[]
+  retirosEntregas          RetiroEntrega[]
+  certificados             Certificado[]
+  certificadoUnidades      CertificadoUnidad[]
+  notificaciones           Notificacion[]
+
+  @@map("tenants")
+}
+
+// ============================================================================
+// Usuarios, Roles y Permisos (RF-27)
+// ============================================================================
+
+enum EstadoUsuario {
+  ACTIVO
+  SUSPENDIDO
+  DADO_DE_BAJA
+}
+
+model Usuario {
+  id               String        @id @default(cuid())
+  tenantId         String?
+  tenant           Tenant?       @relation(fields: [tenantId], references: [id])
+  email            String
+  passwordHash     String
+  nombre           String
+  apellido         String
+  estado           EstadoUsuario @default(ACTIVO)
+  esSuperAdminSaas Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  roles    UsuarioRol[]
+  sesiones Sesion[]
+
+  // El email debe ser único dentro de un tenant. El superadmin SaaS (tenantId null)
+  // se rige por el mismo índice tratando null como su propio "espacio".
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("usuarios")
+}
+
+model Sesion {
+  id               String    @id @default(cuid())
+  usuarioId        String
+  usuario          Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  revokedAt        DateTime?
+  ipAddress        String?
+  userAgent        String?
+
+  @@index([usuarioId])
+  @@map("sesiones")
+}
+
+// Catálogo fijo de permisos: recurso (módulo) + acción. El alcance (scope) se define
+// por asignación en RolPermiso, no en el catálogo, para poder decir por ejemplo
+// "Órdenes | editar | establecimiento asignado" en un rol y "Órdenes | editar | todas" en otro.
+enum RecursoPermiso {
+  CLIENTES
+  ESTABLECIMIENTOS
+  MATAFUEGOS
+  INSPECCIONES
+  NO_CONFORMIDADES
+  MANTENIMIENTOS
+  SERVICIOS_PRECIOS
+  ORDENES_TRABAJO
+  RETIROS_ENTREGAS
+  CERTIFICADOS
+  NOTIFICACIONES
+  REPORTES
+  USUARIOS_ROLES
+  TENANT_ADMIN
+}
+
+enum AccionPermiso {
+  VER
+  CREAR
+  EDITAR
+  APROBAR
+  EMITIR
+  EXPORTAR
+  ELIMINAR
+}
+
+enum AlcancePermiso {
+  PROHIBIDO
+  PROPIO
+  ESTABLECIMIENTO_ASIGNADO
+  SUCURSAL_ACTUAL
+  TODAS
+}
+
+model Rol {
+  id           String   @id @default(cuid())
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id])
+  nombre       String
+  descripcion  String?
+  esRolSistema Boolean  @default(false) // roles base (RF-27) no editables, sirven de plantilla
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  permisos RolPermiso[]
+  usuarios UsuarioRol[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+  @@map("roles")
+}
+
+model RolPermiso {
+  id      String         @id @default(cuid())
+  rolId   String
+  rol     Rol            @relation(fields: [rolId], references: [id], onDelete: Cascade)
+  recurso RecursoPermiso
+  accion  AccionPermiso
+  alcance AlcancePermiso
+
+  @@unique([rolId, recurso, accion])
+  @@map("rol_permisos")
+}
+
+model UsuarioRol {
+  id        String  @id @default(cuid())
+  usuarioId String
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  rolId     String
+  rol       Rol     @relation(fields: [rolId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, rolId])
+  @@map("usuario_roles")
+}
+
+// ============================================================================
+// Auditoría (RF-27, transversal)
+// ============================================================================
+
+enum AccionAuditoria {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  LOGIN
+  LOGIN_FAILED
+  PERMISSION_DENIED
+}
+
+model AuditLog {
+  id            String          @id @default(cuid())
+  tenantId      String?
+  tenant        Tenant?         @relation(fields: [tenantId], references: [id])
+  usuarioId     String?
+  accion        AccionAuditoria
+  entidad       String
+  entidadId     String?
+  valorAnterior Json?
+  valorNuevo    Json?
+  motivo        String?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime        @default(now())
+
+  @@index([tenantId, entidad, entidadId])
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// Clientes (RF-01)
+// ============================================================================
+
+enum TipoCliente {
+  PERSONA_HUMANA
+  PERSONA_JURIDICA
+}
+
+enum CondicionIVA {
+  RESPONSABLE_INSCRIPTO
+  MONOTRIBUTISTA
+  EXENTO
+  CONSUMIDOR_FINAL
+  NO_RESPONSABLE
+}
+
+enum TipoConsumidor {
+  CONSUMIDOR_FINAL
+  EMPRESA
+  ORGANISMO_PUBLICO
+}
+
+enum CanalNotificacion {
+  EMAIL
+  WHATSAPP
+  TELEFONO
+}
+
+enum EstadoCliente {
+  ACTIVO
+  SUSPENDIDO
+  DADO_DE_BAJA
+}
+
+model Cliente {
+  id                  String            @id @default(cuid())
+  tenantId            String
+  tenant              Tenant            @relation(fields: [tenantId], references: [id])
+  tipoCliente         TipoCliente
+  nombre              String?
+  apellido            String?
+  razonSocial         String?
+  nombreFantasia      String?
+  cuit                String?
+  condicionIva        CondicionIVA
+  tipoConsumidor      TipoConsumidor
+  email               String?
+  whatsapp            String?
+  telefonoAlternativo String?
+  domicilioFiscal     String?
+  provincia           String?
+  localidad           String?
+  codigoPostal        String?
+  canalPreferido      CanalNotificacion @default(EMAIL)
+  condicionPago       String?
+  listaPrecioId       String?
+  listaPrecio         ListaPrecio?      @relation(fields: [listaPrecioId], references: [id])
+  observaciones       String?
+  estado              EstadoCliente     @default(ACTIVO)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  contactos           ContactoCliente[]
+  establecimientos    Establecimiento[]
+  matafuegos          Matafuego[]
+  reglaMantenimientos ReglaMantenimiento[]
+  ordenesTrabajo      OrdenTrabajo[]
+  certificados        Certificado[]
+  notificaciones      Notificacion[]
+
+  @@unique([tenantId, cuit])
+  @@index([tenantId, estado])
+  @@map("clientes")
+}
+
+enum TipoContacto {
+  ADMINISTRATIVO
+  TECNICO
+  FACTURACION
+}
+
+model ContactoCliente {
+  id        String       @id @default(cuid())
+  tenantId  String
+  tenant    Tenant       @relation(fields: [tenantId], references: [id])
+  clienteId String
+  cliente   Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  tipo      TipoContacto
+  nombre    String
+  email     String?
+  telefono  String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([tenantId, clienteId])
+  @@map("contactos_cliente")
+}
+
+// ============================================================================
+// Establecimientos (RF-02)
+// ============================================================================
+
+enum EstadoEstablecimiento {
+  ACTIVO
+  SUSPENDIDO
+  DADO_DE_BAJA
+}
+
+model Establecimiento {
+  id                   String                @id @default(cuid())
+  tenantId             String
+  tenant               Tenant                @relation(fields: [tenantId], references: [id])
+  clienteId            String
+  cliente              Cliente               @relation(fields: [clienteId], references: [id])
+  nombre               String
+  direccion            String?
+  provincia            String?
+  localidad            String?
+  codigoPostal         String?
+  latitud              Float?
+  longitud             Float?
+  responsableSeguridad String?
+  contactoOperativo    String?
+  email                String?
+  telefono             String?
+  horariosAtencion     String?
+  indicacionesAcceso   String?
+  normativaAplicable   String?
+  observaciones        String?
+  estado               EstadoEstablecimiento @default(ACTIVO)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  sectores                 Sector[]
+  matafuegos               Matafuego[]
+  inspecciones             Inspeccion[]
+  mantenimientoProgramados MantenimientoProgramado[]
+  ordenesTrabajo           OrdenTrabajo[]
+  certificados             Certificado[]
+
+  @@index([tenantId, clienteId])
+  @@index([tenantId, estado])
+  @@map("establecimientos")
+}
+
+// ============================================================================
+// Sectores y ubicaciones (RF-03)
+// ============================================================================
+//
+// Sector es autorreferenciado en vez de modelar "Piso/Área" y "Sector" como
+// tablas separadas: la jerarquía del documento de requisitos
+// (Establecimiento -> Piso o área -> Sector -> Ubicación) es un árbol de
+// profundidad variable según el cliente (algunos organizan por piso, otros
+// directamente por sector), así que un padre opcional cubre ambos niveles
+// sin duplicar el modelo. No tiene permiso propio en el catálogo de RBAC:
+// se gobierna con el mismo recurso ESTABLECIMIENTOS, del que cuelga.
+
+enum EstadoSector {
+  ACTIVO
+  SUSPENDIDO
+  DADO_DE_BAJA
+}
+
+model Sector {
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  establecimientoId String
+  establecimiento   Establecimiento @relation(fields: [establecimientoId], references: [id])
+  parentSectorId    String?
+  parentSector      Sector?         @relation("SectorJerarquia", fields: [parentSectorId], references: [id])
+  subSectores       Sector[]        @relation("SectorJerarquia")
+  nombre            String
+  responsable       String?
+  observaciones     String?
+  estado            EstadoSector    @default(ACTIVO)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  ubicaciones Ubicacion[]
+  matafuegos  Matafuego[]
+
+  @@index([tenantId, establecimientoId])
+  @@index([tenantId, parentSectorId])
+  @@map("sectores")
+}
+
+enum EstadoUbicacion {
+  ACTIVO
+  SUSPENDIDO
+  DADO_DE_BAJA
+}
+
+model Ubicacion {
+  id          String          @id @default(cuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  sectorId    String
+  sector      Sector          @relation(fields: [sectorId], references: [id])
+  nombre      String
+  descripcion String?
+  estado      EstadoUbicacion @default(ACTIVO)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  matafuegos  Matafuego[]
+
+  // Dos relaciones separadas hacia Inspeccion (registrada vs. detectada):
+  // hace falta nombrarlas explícitamente porque Prisma no puede autogenerar
+  // dos nombres de campo inverso distintos para el mismo par de modelos.
+  inspeccionesComoUbicacionRegistrada Inspeccion[] @relation("InspeccionUbicacionRegistrada")
+  inspeccionesComoUbicacionDetectada  Inspeccion[] @relation("InspeccionUbicacionDetectada")
+
+  @@index([tenantId, sectorId])
+  @@map("ubicaciones")
+}
+
+// ============================================================================
+// Inventario técnico de matafuegos (RF-04)
+// ============================================================================
+
+enum TipoMatafuego {
+  PORTATIL
+  RODANTE
+  VEHICULAR
+  OTRO
+}
+
+enum AgenteExtintor {
+  POLVO_QUIMICO_ABC
+  CO2
+  AGUA
+  ESPUMA
+  AGENTE_LIMPIO
+  OTRO
+}
+
+enum EstadoMatafuego {
+  INSTALADO
+  PENDIENTE_DE_CONTROL
+  APTO
+  OBSERVADO
+  VENCIDO
+  RETIRADO
+  EN_TRASLADO
+  EN_TALLER
+  EN_RECARGA
+  EN_PRUEBA_HIDRAULICA
+  RECHAZADO
+  FUERA_DE_SERVICIO
+  ENTREGADO
+  DADO_DE_BAJA
+  EXTRAVIADO
+}
+
+model Matafuego {
+  id                          String          @id @default(cuid())
+  tenantId                    String
+  tenant                      Tenant          @relation(fields: [tenantId], references: [id])
+  codigoInterno               String
+  numeroSerie                 String
+  codigoBarras                String?
+  // Identificador público opaco para el QR (RF-05): deliberadamente distinto
+  // del `id` interno para poder rotarlo (sticker perdido/dañado) sin afectar
+  // ninguna referencia (órdenes, certificados, etc.) que apunte al matafuego
+  // por su id real. Se genera siempre en código de aplicación (ver
+  // src/server/qr/token.ts), nunca con un default de la base, para que la
+  // rotación use exactamente la misma lógica que la generación inicial.
+  qrToken                     String          @unique
+  clienteId                   String
+  cliente                     Cliente         @relation(fields: [clienteId], references: [id])
+  establecimientoId           String
+  establecimiento             Establecimiento @relation(fields: [establecimientoId], references: [id])
+  sectorId                    String?
+  sector                      Sector?         @relation(fields: [sectorId], references: [id])
+  ubicacionId                 String?
+  ubicacion                   Ubicacion?      @relation(fields: [ubicacionId], references: [id])
+  tipo                        TipoMatafuego
+  agenteExtintor              AgenteExtintor
+  capacidadNominal            String?
+  marca                       String?
+  modelo                      String?
+  fabricante                  String?
+  fechaFabricacion            DateTime?
+  fechaPuestaServicio         DateTime?
+  fechaUltimaInspeccion       DateTime?
+  fechaUltimoControl          DateTime?
+  fechaUltimoMantenimiento    DateTime?
+  fechaUltimaRecarga          DateTime?
+  fechaUltimaPruebaHidraulica DateTime?
+  proximaInspeccion           DateTime?
+  proximoMantenimiento        DateTime?
+  proximaRecarga              DateTime?
+  proximaPruebaHidraulica     DateTime?
+  pesoNominal                 Float?
+  pesoVerificado              Float?
+  estadoManometro             String?
+  estadoMangueraBoquilla      String?
+  estadoPrecinto              String?
+  estadoSoporteGabinete       String?
+  normaTecnica                String?
+  observaciones               String?
+  estado                      EstadoMatafuego @default(PENDIENTE_DE_CONTROL)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+
+  movimientos              MovimientoMatafuego[]
+  inspecciones             Inspeccion[]
+  noConformidades          NoConformidad[]
+  mantenimientoProgramados MantenimientoProgramado[]
+  ordenTrabajoUnidades     OrdenTrabajoUnidad[]
+  ordenTrabajoItems        OrdenTrabajoItem[]
+  retirosEntregas          RetiroEntrega[]
+  certificadoUnidades      CertificadoUnidad[]
+
+  @@unique([tenantId, numeroSerie])
+  @@unique([tenantId, codigoInterno])
+  @@index([tenantId, estado])
+  @@index([tenantId, clienteId])
+  @@index([tenantId, establecimientoId])
+  @@index([tenantId, ubicacionId])
+  @@map("matafuegos")
+}
+
+/**
+ * Historial de traslados: append-only, nunca se edita ni se borra un
+ * movimiento ya registrado (RF-03: "conservando historial").
+ */
+model MovimientoMatafuego {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+  matafuegoId        String
+  matafuego          Matafuego @relation(fields: [matafuegoId], references: [id])
+  sectorOrigenId     String?
+  ubicacionOrigenId  String?
+  sectorDestinoId    String?
+  ubicacionDestinoId String?
+  usuarioId          String
+  motivo             String?
+  createdAt          DateTime  @default(now())
+
+  @@index([tenantId, matafuegoId])
+  @@map("movimientos_matafuego")
+}
+
+// ============================================================================
+// Inspecciones (RF-06)
+// ============================================================================
+
+enum ResultadoInspeccion {
+  APTO
+  APTO_CON_OBSERVACIONES
+  REQUIERE_MANTENIMIENTO
+  REQUIERE_RECARGA
+  REQUIERE_REEMPLAZO
+  NO_ENCONTRADO
+  ACCESO_IMPOSIBLE
+}
+
+enum EstadoSincronizacion {
+  SINCRONIZADO
+  PENDIENTE
+}
+
+model Inspeccion {
+  id                     String               @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant               @relation(fields: [tenantId], references: [id])
+  matafuegoId            String
+  matafuego              Matafuego            @relation(fields: [matafuegoId], references: [id])
+  establecimientoId      String
+  establecimiento        Establecimiento      @relation(fields: [establecimientoId], references: [id])
+  tecnicoId              String
+  // "Fecha y hora del servidor": se fija con @default(now()) en el momento del
+  // insert, nunca se acepta un valor de fecha propuesto por el cliente.
+  fechaHora              DateTime             @default(now())
+  // Snapshot de matafuego.ubicacionId al momento de inspeccionar (dónde el
+  // sistema esperaba encontrarla) vs. dónde la encontró el técnico realmente.
+  // La diferencia entre ambas es la señal de "movimiento no registrado".
+  ubicacionRegistradaId  String?
+  ubicacionRegistrada    Ubicacion?           @relation("InspeccionUbicacionRegistrada", fields: [ubicacionRegistradaId], references: [id])
+  ubicacionDetectadaId   String?
+  ubicacionDetectada     Ubicacion?           @relation("InspeccionUbicacionDetectada", fields: [ubicacionDetectadaId], references: [id])
+  resultado              ResultadoInspeccion
+  comentarios            String?
+  firmaResponsableNombre String?
+  latitud                Float?
+  longitud               Float?
+  dispositivo            String?
+  estadoSincronizacion   EstadoSincronizacion @default(SINCRONIZADO)
+
+  // Checklist técnico (RF-06). Todos opcionales: un resultado NO_ENCONTRADO o
+  // ACCESO_IMPOSIBLE no tiene checklist físico que completar.
+  equipoPresente           Boolean?
+  accesoLibre              Boolean?
+  senalizacionVisible      Boolean?
+  soporteFirme             Boolean?
+  ausenciaDanios           Boolean?
+  ausenciaCorrosion        Boolean?
+  mangueraEnBuenEstado     Boolean?
+  boquillaSinObstrucciones Boolean?
+  precintoIntacto          Boolean?
+  pasadorSeguridadColocado Boolean?
+  manometroDentroDeRango   Boolean?
+  pesoDentroDeTolerancia   Boolean?
+  etiquetaLegible          Boolean?
+  fechaVigente             Boolean?
+  sinIndiciosDeDescarga    Boolean?
+  ubicacionCorrecta        Boolean?
+  fotografiaGeneral        Boolean?
+  fotografiaEtiqueta       Boolean?
+  fotografiaManometro      Boolean?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  noConformidades NoConformidad[]
+  ordenesTrabajo  OrdenTrabajo[]
+
+  @@index([tenantId, matafuegoId])
+  @@index([tenantId, establecimientoId])
+  @@index([tenantId, tecnicoId])
+  @@map("inspecciones")
+}
+
+// ============================================================================
+// No conformidades (RF-07)
+// ============================================================================
+
+enum SeveridadNoConformidad {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum NivelRiesgoNoConformidad {
+  BAJO
+  MEDIO
+  ALTO
+  CRITICO
+}
+
+enum EstadoNoConformidad {
+  ABIERTA
+  ASIGNADA
+  EN_TRATAMIENTO
+  RESUELTA
+  VERIFICADA
+  CERRADA
+  DESCARTADA
+}
+
+model NoConformidad {
+  id                    String                   @id @default(cuid())
+  tenantId              String
+  tenant                Tenant                   @relation(fields: [tenantId], references: [id])
+  matafuegoId           String
+  matafuego             Matafuego                @relation(fields: [matafuegoId], references: [id])
+  // La inspección de origen es opcional: RF-07 permite registrar no
+  // conformidades detectadas en mantenimientos o entregas también, no sólo en
+  // inspecciones. El vínculo con la orden de trabajo que la origina (RF-11)
+  // vive del otro lado, en OrdenTrabajo.noConformidadOrigenId (ver
+  // `ordenesTrabajo` más abajo).
+  inspeccionId          String?
+  inspeccion            Inspeccion?              @relation(fields: [inspeccionId], references: [id])
+  // Quién la detectó/reportó — no necesariamente quien queda como responsable
+  // de resolverla (eso es `responsableId`, se asigna después).
+  detectadaPorId        String
+  tipoDefecto           String
+  descripcion           String
+  severidad             SeveridadNoConformidad
+  nivelRiesgo           NivelRiesgoNoConformidad
+  accionInmediata       String?
+  responsableId         String?
+  fechaLimite           DateTime?
+  resolucion            String?
+  reinspeccionRequerida Boolean                  @default(false)
+  estado                EstadoNoConformidad      @default(ABIERTA)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  ordenesTrabajo OrdenTrabajo[]
+
+  @@index([tenantId, matafuegoId])
+  @@index([tenantId, estado])
+  @@index([tenantId, responsableId])
+  @@map("no_conformidades")
+}
+
+// ============================================================================
+// Programación de mantenimientos (RF-08)
+// ============================================================================
+
+enum TipoServicioMantenimiento {
+  INSPECCION
+  MANTENIMIENTO
+  RECARGA
+  PRUEBA_HIDRAULICA
+  CAMBIO_AGENTE
+  REPARACION
+  RETIRO_ENTREGA
+  OTRO
+}
+
+enum EstadoReglaMantenimiento {
+  ACTIVA
+  INACTIVA
+}
+
+/**
+ * "Las periodicidades no deberán estar codificadas de forma rígida" (RF-08):
+ * en vez de un número fijo por tipo de servicio, cada regla declara a qué
+ * combinación de cliente/tipo/agente aplica y con qué frecuencia. Nunca se
+ * editan en el lugar — cambiar un criterio es desactivar la regla vieja
+ * (estado INACTIVA) y crear una nueva, así el `reglaAplicadaId` que quedó
+ * grabado en cada MantenimientoProgramado ya emitido preserva para siempre
+ * bajo qué criterio se calculó (RF-08 sección 2: "las reglas deberán ser
+ * versionadas para preservar el criterio aplicado históricamente").
+ */
+model ReglaMantenimiento {
+  id              String                    @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                    @relation(fields: [tenantId], references: [id])
+  // null = aplica a cualquier cliente del tenant; un valor concreto = excepción
+  // para ese cliente puntual (contrato particular).
+  clienteId       String?
+  cliente         Cliente?                  @relation(fields: [clienteId], references: [id])
+  tipoServicio    TipoServicioMantenimiento
+  tipoMatafuego   TipoMatafuego?
+  agenteExtintor  AgenteExtintor?
+  frecuenciaMeses Int
+  normaTecnica    String?
+  jurisdiccion    String?
+  descripcion     String?
+  estado          EstadoReglaMantenimiento  @default(ACTIVA)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  mantenimientos MantenimientoProgramado[]
+
+  @@index([tenantId, tipoServicio, estado])
+  @@map("reglas_mantenimiento")
+}
+
+enum PrioridadMantenimiento {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum EstadoMantenimientoProgramado {
+  PROGRAMADO
+  REPROGRAMADO
+  REALIZADO
+  CANCELADO
+}
+
+model MantenimientoProgramado {
+  id                      String                        @id @default(cuid())
+  tenantId                String
+  tenant                  Tenant                        @relation(fields: [tenantId], references: [id])
+  matafuegoId             String
+  matafuego               Matafuego                     @relation(fields: [matafuegoId], references: [id])
+  establecimientoId       String
+  establecimiento         Establecimiento               @relation(fields: [establecimientoId], references: [id])
+  tipoServicio            TipoServicioMantenimiento
+  fechaProgramada         DateTime
+  // Null cuando la fecha se fijó a mano; con valor cuando salió de calcularProximoMantenimiento().
+  reglaAplicadaId         String?
+  reglaAplicada           ReglaMantenimiento?           @relation(fields: [reglaAplicadaId], references: [id])
+  tecnicoAsignadoId       String?
+  prioridad               PrioridadMantenimiento        @default(MEDIA)
+  motivo                  String?
+  observaciones           String?
+  // true cuando se cargó después de ocurrido (RF-08: "mantenimiento realizado
+  // anteriormente pero no registrado"), no como una programación a futuro.
+  cargadoRetroactivamente Boolean                       @default(false)
+  estado                  EstadoMantenimientoProgramado @default(PROGRAMADO)
+  createdAt               DateTime                      @default(now())
+  updatedAt               DateTime                      @updatedAt
+
+  ordenesTrabajo OrdenTrabajo[]
+
+  @@index([tenantId, matafuegoId])
+  @@index([tenantId, fechaProgramada])
+  @@index([tenantId, estado])
+  @@index([tenantId, tecnicoAsignadoId])
+  @@map("mantenimientos_programados")
+}
+
+// ============================================================================
+// Servicios y precios (RF-09)
+// ============================================================================
+
+enum CategoriaServicio {
+  RECARGA
+  PRUEBA_HIDRAULICA
+  PINTURA
+  REPARACION
+  CAMBIO_AGENTE
+  INSPECCION
+  MANTENIMIENTO
+  REEMPLAZO_REPUESTOS
+  VENTA
+  INSTALACION
+  RETIRO_ENTREGA
+  OTRO
+}
+
+enum Moneda {
+  ARS
+  USD
+}
+
+enum EstadoServicio {
+  ACTIVO
+  INACTIVO
+}
+
+model Servicio {
+  id                      String            @id @default(cuid())
+  tenantId                String
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id])
+  codigo                  String
+  nombre                  String
+  categoria               CategoriaServicio
+  descripcion             String?
+  // Precio/costo con precisión decimal real (@db.Decimal), no Float: son
+  // valores con impacto de facturación, no admiten error de redondeo binario.
+  precioBase              Decimal           @db.Decimal(12, 2)
+  costoEstimado           Decimal?          @db.Decimal(12, 2)
+  iva                     Decimal           @default(21) @db.Decimal(5, 2)
+  moneda                  Moneda            @default(ARS)
+  duracionEstimadaMinutos Int?
+  agentesCompatibles      AgenteExtintor[]
+  capacidadesCompatibles  String[]
+  requiereRetiro          Boolean           @default(false)
+  requiereEnsayo          Boolean           @default(false)
+  requiereRepuestos       Boolean           @default(false)
+  requiereCertificado     Boolean           @default(false)
+  vigenteDesde            DateTime?
+  vigenteHasta            DateTime?
+  estado                  EstadoServicio    @default(ACTIVO)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  precios           PrecioServicio[]
+  ordenTrabajoItems OrdenTrabajoItem[]
+
+  @@unique([tenantId, codigo])
+  @@index([tenantId, estado])
+  @@map("servicios")
+}
+
+enum EstadoListaPrecio {
+  ACTIVA
+  INACTIVA
+}
+
+model ListaPrecio {
+  id               String            @id @default(cuid())
+  tenantId         String
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  nombre           String
+  descripcion      String?
+  esPredeterminada Boolean           @default(false)
+  estado           EstadoListaPrecio @default(ACTIVA)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  precios  PrecioServicio[]
+  clientes Cliente[]
+
+  @@unique([tenantId, nombre])
+  @@map("listas_precio")
+}
+
+/**
+ * Historial de precios (RF-09): nunca se edita un precio vigente, se cierra
+ * (vigenteHasta) y se crea uno nuevo. Así una orden de trabajo que copió un
+ * precio en su momento (cuando exista RF-11) sigue viendo el valor que
+ * realmente se usó, sin importar cuántas veces haya cambiado desde entonces.
+ */
+model PrecioServicio {
+  id            String      @id @default(cuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  listaPrecioId String
+  listaPrecio   ListaPrecio @relation(fields: [listaPrecioId], references: [id])
+  servicioId    String
+  servicio      Servicio    @relation(fields: [servicioId], references: [id])
+  precio        Decimal     @db.Decimal(12, 2)
+  vigenteDesde  DateTime    @default(now())
+  vigenteHasta  DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([tenantId, listaPrecioId, servicioId, vigenteHasta])
+  @@map("precios_servicio")
+}
+
+// ============================================================================
+// Órdenes de trabajo (RF-11)
+// ============================================================================
+
+enum OrigenOrdenTrabajo {
+  MANUAL
+  INSPECCION
+  VENCIMIENTO
+  PRESUPUESTO
+  NO_CONFORMIDAD
+  SOLICITUD_CLIENTE
+  MANTENIMIENTO_PROGRAMADO
+}
+
+enum PrioridadOrdenTrabajo {
+  BAJA
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum EstadoOrdenTrabajo {
+  BORRADOR
+  PENDIENTE_DE_APROBACION
+  PROGRAMADA
+  ASIGNADA
+  EN_CAMINO
+  EN_PROCESO
+  PAUSADA
+  FINALIZADA
+  ENTREGADA
+  CANCELADA
+  FACTURADA
+}
+
+model OrdenTrabajo {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  // Correlativo por tenant (no el autoincremental de Postgres, para no filtrar
+  // volumen entre tenants): se calcula dentro de la misma transacción de alta.
+  numero Int
+
+  clienteId         String
+  cliente           Cliente          @relation(fields: [clienteId], references: [id])
+  establecimientoId String?
+  establecimiento   Establecimiento? @relation(fields: [establecimientoId], references: [id])
+
+  // Orígenes posibles (RF-11): sólo se resuelven los que ya existen como
+  // módulo (inspección, no conformidad, mantenimiento programado). Presupuesto
+  // y vencimiento/solicitud del cliente son "segunda etapa" — el campo
+  // `origen` ya los admite como etiqueta aunque todavía no haya un FK que
+  // vincular, para no tener que migrar el enum cuando se implementen.
+  origen                OrigenOrdenTrabajo       @default(MANUAL)
+  inspeccionOrigenId    String?
+  inspeccionOrigen      Inspeccion?              @relation(fields: [inspeccionOrigenId], references: [id])
+  noConformidadOrigenId String?
+  noConformidadOrigen   NoConformidad?           @relation(fields: [noConformidadOrigenId], references: [id])
+  mantenimientoOrigenId String?
+  mantenimientoOrigen   MantenimientoProgramado? @relation(fields: [mantenimientoOrigenId], references: [id])
+
+  estado    EstadoOrdenTrabajo    @default(BORRADOR)
+  prioridad PrioridadOrdenTrabajo @default(NORMAL)
+
+  // Sin relación FK a Usuario: mismo criterio ya usado en
+  // MantenimientoProgramado.tecnicoAsignadoId (evita atar el ciclo de vida de
+  // la orden a que el usuario técnico siga existiendo).
+  tecnicoAsignadoId String?
+
+  fechaApertura     DateTime  @default(now())
+  fechaProgramada   DateTime?
+  fechaInicio       DateTime?
+  fechaFinalizacion DateTime?
+
+  horasTrabajadas     Decimal? @db.Decimal(6, 2)
+  repuestosUtilizados String?
+  resultadoTecnico    String?
+  observaciones       String?
+  motivoCancelacion   String?
+
+  // Placeholder de conformidad del cliente: la firma real (imagen) depende de
+  // RF-18 (gestión de archivos), que todavía no existe. Se registra al menos
+  // el hecho de que se confirmó, para no bloquear el flujo BORRADOR→ENTREGADA.
+  confirmacionClienteRecibida Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items           OrdenTrabajoItem[]
+  unidades        OrdenTrabajoUnidad[]
+  retirosEntregas RetiroEntrega[]
+  certificados    Certificado[]
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, estado])
+  @@index([tenantId, clienteId])
+  @@index([tenantId, tecnicoAsignadoId])
+  @@map("ordenes_trabajo")
+}
+
+// Unidades incluidas en la orden (RF-11: "unidades incluidas"), separado de
+// los ítems de servicio porque una orden puede cubrir varias unidades con
+// distintos servicios cada una (tabla puente, no un simple array de ids).
+model OrdenTrabajoUnidad {
+  id          String       @id @default(cuid())
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  ordenId     String
+  orden       OrdenTrabajo @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  matafuegoId String
+  matafuego   Matafuego    @relation(fields: [matafuegoId], references: [id])
+  createdAt   DateTime     @default(now())
+
+  @@unique([ordenId, matafuegoId])
+  @@index([tenantId, matafuegoId])
+  @@map("ordenes_trabajo_unidades")
+}
+
+model OrdenTrabajoItem {
+  id       String       @id @default(cuid())
+  tenantId String
+  tenant   Tenant       @relation(fields: [tenantId], references: [id])
+  ordenId  String
+  orden    OrdenTrabajo @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  servicioId  String
+  servicio    Servicio   @relation(fields: [servicioId], references: [id])
+  matafuegoId String?
+  matafuego   Matafuego? @relation(fields: [matafuegoId], references: [id])
+
+  // Snapshot al momento de agregar el ítem (RF-09: "se copia su precio y
+  // descripción vigentes"): cambios posteriores al servicio o a la lista de
+  // precios no deben alterar retroactivamente órdenes ya creadas.
+  descripcion    String
+  cantidad       Int     @default(1)
+  precioUnitario Decimal @db.Decimal(12, 2)
+  subtotal       Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, ordenId])
+  @@map("ordenes_trabajo_items")
+}
+
+// ============================================================================
+// Retiro, traslado y cadena de custodia (RF-12)
+// ============================================================================
+
+enum EstadoRetiroEntrega {
+  RETIRADO
+  EN_TRASLADO
+  EN_TALLER
+  ENTREGADO
+  CANCELADO
+}
+
+/**
+ * Un registro por ciclo de custodia (retiro → traslado → taller → entrega),
+ * no una fila por evento: se actualiza a medida que avanza, igual que
+ * OrdenTrabajo, en vez de una tabla de eventos append-only. El historial de
+ * "quién tuvo la unidad y cuándo" queda en el audit log (mismo mecanismo que
+ * el resto del sistema), no en una estructura ad hoc.
+ * "Fotografías" (RF-12 sección de datos) queda deliberadamente afuera: depende
+ * de RF-18 (gestión de archivos), que todavía no existe.
+ */
+model RetiroEntrega {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  matafuegoId    String
+  matafuego      Matafuego     @relation(fields: [matafuegoId], references: [id])
+  ordenTrabajoId String?
+  ordenTrabajo   OrdenTrabajo? @relation(fields: [ordenTrabajoId], references: [id])
+
+  // Quién tiene la custodia física de la unidad en este momento del ciclo.
+  // Sin relación FK a Usuario (mismo criterio que tecnicoAsignadoId en
+  // MantenimientoProgramado/OrdenTrabajo). Se reasigna en ingresarATaller:
+  // quien recibe la unidad en el taller pasa a ser el nuevo responsable.
+  tecnicoResponsableId String?
+
+  personaQueEntrega  String?
+  personaQueRetira   String?
+  vehiculo           String?
+  destino            String?
+  estadoUnidadRetiro String?
+  fechaHoraRetiro    DateTime?
+
+  fechaHoraIngresoTaller DateTime?
+  ubicacionInterna       String?
+  fechaSalida            DateTime?
+
+  personaQueRecibe     String?
+  firmaRecepcionNombre String?
+
+  observaciones     String?
+  motivoCancelacion String?
+
+  estado EstadoRetiroEntrega @default(RETIRADO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, matafuegoId])
+  @@index([tenantId, estado])
+  @@index([tenantId, tecnicoResponsableId])
+  @@map("retiros_entregas")
+}
+
+// ============================================================================
+// Certificados y documentación técnica (RF-17, alcance "básicos" del MVP)
+// ============================================================================
+
+enum TipoCertificado {
+  CERTIFICADO_MANTENIMIENTO
+  CERTIFICADO_RECARGA
+  INFORME_INSPECCION
+  ACTA_RETIRO
+  ACTA_ENTREGA
+  INFORME_PRUEBA_HIDRAULICA
+  CONSTANCIA_NO_CONFORMIDAD
+  PLANILLA_DOTACION
+  HISTORIAL_TECNICO
+  CERTIFICADO_BAJA
+}
+
+/**
+ * BORRADOR y VIGENTE están en el enum por fidelidad con el documento de
+ * requisitos, pero el servicio nunca los asigna como transición real:
+ * - BORRADOR: un certificado con valor legal (normativa IRAM, ver CLAUDE.md)
+ * se crea ya emitido, no como un borrador editable — la única función de
+ * alta es `emitirCertificado`, coherente con "inmutabilidad con auditoría,
+ * no edición retroactiva silenciosa".
+ * - VIGENTE: se calcula en el momento (estado EMITIDO + vigenciaHasta futura
+ * o nula) en vez de ser una transición separada, para no depender de un
+ * job en background que lo actualice automáticamente al vencer. Ver
+ * `estaVigente()` en certificados/service.ts.
+ */
+enum EstadoCertificado {
+  BORRADOR
+  EMITIDO
+  VIGENTE
+  ANULADO
+  REEMPLAZADO
+}
+
+model Certificado {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  numero Int
+
+  clienteId         String
+  cliente           Cliente          @relation(fields: [clienteId], references: [id])
+  establecimientoId String?
+  establecimiento   Establecimiento? @relation(fields: [establecimientoId], references: [id])
+  ordenTrabajoId    String
+  ordenTrabajo      OrdenTrabajo     @relation(fields: [ordenTrabajoId], references: [id])
+
+  tipo TipoCertificado
+
+  // Snapshot al momento de emitir (mismo criterio que OrdenTrabajoItem en
+  // RF-09/RF-11): cambios posteriores en la orden no deben alterar
+  // retroactivamente un documento con valor legal ya emitido.
+  serviciosRealizados String[]
+
+  // Sin relación FK a Usuario (mismo criterio que tecnicoAsignadoId en otros
+  // módulos). responsableTecnicoNombre es el snapshot legible del nombre en
+  // el momento de la firma, también inmutable ante futuros cambios de perfil.
+  responsableTecnicoId     String?
+  responsableTecnicoNombre String?
+  // Placeholder de firma: la firma real (imagen) depende de RF-18 (gestión de
+  // archivos), que todavía no existe — mismo criterio que
+  // confirmacionClienteRecibida (RF-11) y firmaRecepcionNombre (RF-12).
+  firmaResponsableNombre   String?
+
+  fecha         DateTime  @default(now())
+  vigenciaHasta DateTime?
+
+  // Token opaco para verificación pública por QR (RF-05 ya estableció el
+  // mismo patrón para matafuegos): generado siempre en código de aplicación,
+  // nunca con un default de la base.
+  qrToken String @unique
+
+  version        Int          @default(1)
+  // La versión anterior que este certificado reemplaza. La cadena completa se
+  // recorre navegando reemplazaA/reemplazadoPor; no hay un campo separado de
+  // "versión raíz" porque nunca hace falta resolverlo en un solo query.
+  reemplazaAId   String?      @unique
+  reemplazaA     Certificado? @relation("CertificadoVersion", fields: [reemplazaAId], references: [id])
+  reemplazadoPor Certificado? @relation("CertificadoVersion")
+
+  motivoAnulacion String?
+  motivoReemplazo String?
+  observaciones   String?
+
+  estado EstadoCertificado @default(EMITIDO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  unidades CertificadoUnidad[]
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, estado])
+  @@index([tenantId, clienteId])
+  @@index([tenantId, ordenTrabajoId])
+  @@map("certificados")
+}
+
+model CertificadoUnidad {
+  id            String      @id @default(cuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  certificadoId String
+  certificado   Certificado @relation(fields: [certificadoId], references: [id], onDelete: Cascade)
+  matafuegoId   String
+  matafuego     Matafuego   @relation(fields: [matafuegoId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@unique([certificadoId, matafuegoId])
+  @@index([tenantId, matafuegoId])
+  @@map("certificados_unidades")
+}
+
+// ============================================================================
+// Notificaciones automáticas (RF-19)
+// ============================================================================
+
+enum EventoNotificacion {
+  VENCIMIENTO_PROXIMO
+  MATAFUEGO_VENCIDO
+  MANTENIMIENTO_PROXIMO
+  MANTENIMIENTO_ATRASADO
+  PRUEBA_HIDRAULICA_PROXIMA
+  PRESUPUESTO_ENVIADO
+  PRESUPUESTO_PENDIENTE
+  ORDEN_PROGRAMADA
+  TECNICO_DEMORADO
+  UNIDAD_RETIRADA
+  UNIDAD_LISTA_PARA_ENTREGA
+  REEMPLAZO_TEMPORAL_ATRASADO
+  CERTIFICADO_EMITIDO
+  FACTURA_EMITIDA
+  FACTURA_VENCIDA
+  STOCK_MINIMO
+  ERROR_INTEGRACION
+}
+
+enum EstadoNotificacion {
+  PENDIENTE
+  EN_PROCESO
+  ENVIADA
+  ENTREGADA
+  LEIDA
+  FALLIDA
+  REINTENTO
+  CANCELADA
+}
+
+/**
+ * Sólo se generan los eventos cuyo módulo de origen ya existe (RF-01..RF-12,
+ * RF-17): PRESUPUESTO_* (RF-10), TECNICO_DEMORADO (RF-20), REEMPLAZO_*
+ * (RF-13), FACTURA_* (RF-23), STOCK_MINIMO (RF-16) y ERROR_INTEGRACION
+ * quedan en el catálogo por fidelidad con el documento de requisitos, pero
+ * ningún código los emite todavía — se activan solos cuando se implemente el
+ * módulo correspondiente, sin necesidad de migrar este enum.
+ * `claveDedup` incluye un bucket de fecha (día) para que el índice único
+ * (tenantId, claveDedup) evite un duplicado del *mismo* evento el *mismo*
+ * día sin bloquear para siempre notificaciones futuras legítimas del mismo
+ * tipo sobre la misma entidad (ej. "mantenimiento próximo" se puede volver a
+ * avisar al día siguiente si sigue sin resolverse).
+ */
+model Notificacion {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  evento           EventoNotificacion
+  canal            CanalNotificacion
+  // Canal de respaldo si `canal` falla (RF-19: "dado un canal fallido, cuando
+  // existe un canal alternativo, el sistema ejecuta el fallback").
+  canalAlternativo CanalNotificacion?
+
+  destinatarioNombre   String?
+  destinatarioEmail    String?
+  destinatarioWhatsapp String?
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+  // Sin relación FK a Usuario (mismo criterio que tecnicoAsignadoId en otros
+  // módulos): a quién le llega, no de quién depende su existencia.
+  usuarioId String?
+
+  // Referencia polimórfica a la entidad que originó el evento (mismo patrón
+  // que AuditLog.entidad/entidadId), sin FK: un Matafuego, un
+  // MantenimientoProgramado, un Certificado, etc.
+  entidadTipo String
+  entidadId   String
+
+  plantilla String
+  // Variables para renderizar la plantilla (nombre del cliente, fecha de
+  // vencimiento, número de certificado, etc.) — snapshot al momento de
+  // generarse, no se recalcula si la entidad de origen cambia después.
+  payload   Json?
+
+  claveDedup String
+
+  estado      EstadoNotificacion @default(PENDIENTE)
+  intentos    Int                @default(0)
+  maxIntentos Int                @default(3)
+
+  programadaPara DateTime  @default(now())
+  enviadaEn      DateTime?
+  entregadaEn    DateTime?
+  leidaEn        DateTime?
+  errorDetalle   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, claveDedup])
+  @@index([tenantId, estado])
+  @@index([tenantId, evento])
+  @@index([tenantId, usuarioId])
+  @@map("notificaciones")
+}

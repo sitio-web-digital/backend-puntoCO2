@@ -1,0 +1,27 @@
+# Claude Code local settings (personal, no se versiona)
+.claude/settings.local.json
+
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Env
+.env
+.env*.local
+
+# Prisma
+prisma/dev.db
+
+# Testing
+coverage/
+playwright-report/
+test-results/
+
+# Misc
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
