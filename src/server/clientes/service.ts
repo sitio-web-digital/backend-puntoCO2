@@ -3,6 +3,7 @@ import { withTenant } from "../db/with-tenant";
 import { writeAudit } from "../audit/log";
 import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
+import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import { createClienteSchema, updateClienteSchema, type CreateClienteInput, type UpdateClienteInput } from "./schemas";
 
 export interface TenantActor {
@@ -48,6 +49,24 @@ export async function listClientes(actor: TenantActor, filtros: { estado?: Estad
       ...(filtros.estado ? { where: { estado: filtros.estado } } : {}),
       orderBy: { createdAt: "desc" },
     });
+  });
+}
+
+export async function listClientesPaginado(actor: TenantActor, filtros: { estado?: EstadoCliente } & PaginationParams = {}) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, "CLIENTES", "VER");
+    if (scope !== "TODAS") {
+      return toPaginatedResult([], 0, 1, paginationArgs(filtros).pageSize);
+    }
+
+    const where = filtros.estado ? { estado: filtros.estado } : {};
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+    const [items, total] = await Promise.all([
+      tx.cliente.findMany({ where, orderBy: { createdAt: "desc" }, skip, take }),
+      tx.cliente.count({ where }),
+    ]);
+    return toPaginatedResult(items, total, page, pageSize);
   });
 }
 

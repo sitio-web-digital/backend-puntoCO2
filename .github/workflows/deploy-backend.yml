@@ -1,0 +1,70 @@
+name: Deploy backend (self-hosted)
+
+# Solo develop dispara deploy automático por ahora, mismo criterio que el
+# resto de los proyectos de sitio-web-digital.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: puntoco2-backend
+  CONTAINER_NAME: puntoco2-backend
+  # Archivo persistente en el runner con las variables reales (DATABASE_URL,
+  # RUNTIME_DATABASE_URL, AUTH_SECRET, PORT). No vive en el repo — hay que
+  # crearlo a mano una vez en la máquina del runner. IMPORTANTE: tiene que
+  # incluir PORT=<algo>, porque el healthcheck de abajo prueba ese puerto —
+  # si falta, Next.js arranca en el 3000 por defecto pero el healthcheck cae
+  # a 4000 y el deploy se reporta como fallido aunque la app esté bien.
+  ENV_FILE: /opt/sitioweb/puntoco2-backend.env
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verificar que existe el .env del runner
+        run: |
+          if [ ! -f "$ENV_FILE" ]; then
+            echo "::error::No existe $ENV_FILE en el runner. Crealo antes de correr este workflow (DATABASE_URL, RUNTIME_DATABASE_URL, AUTH_SECRET, PORT)."
+            exit 1
+          fi
+
+      - name: Build de la imagen
+        run: docker build -t "$IMAGE_NAME:${{ github.sha }}" -t "$IMAGE_NAME:latest" .
+
+      - name: Sacar el contenedor anterior
+        run: docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+
+      - name: Levantar el contenedor nuevo
+        run: |
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            --network host \
+            --env-file "$ENV_FILE" \
+            "$IMAGE_NAME:latest"
+
+      - name: Esperar a que responda /api/health
+        run: |
+          PORT="$(grep -m1 '^PORT=' "$ENV_FILE" | cut -d= -f2-)"
+          PORT="${PORT:-4000}"
+          for i in $(seq 1 30); do
+            if curl -sf "http://localhost:${PORT}/api/health" >/dev/null; then
+              echo "Backend arriba."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::El backend no respondió /api/health a tiempo."
+          docker logs --tail 100 "$CONTAINER_NAME"
+          exit 1
+
+      - name: Limpiar imágenes viejas
+        run: docker image prune -f

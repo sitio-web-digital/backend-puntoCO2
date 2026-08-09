@@ -22,6 +22,7 @@ import {
   anularCertificado,
   reemplazarCertificado,
   listCertificados,
+  listCertificadosPaginado,
   getCertificado,
   resolverCertificadoPublico,
   estaVigente,
@@ -286,6 +287,68 @@ describe("certificados y documentación técnica (RF-17)", () => {
       const certificado = await emitirCertificado(actorA, { ordenTrabajoId: ordenId, tipo: "CERTIFICADO_RECARGA" });
 
       await expect(getCertificado(actorB, certificado.id)).rejects.toThrow();
+    });
+  });
+
+  describe("listado paginado", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor, ordenId } = await setupOrdenFinalizada();
+      for (let i = 0; i < 5; i++) {
+        await emitirCertificado(adminActor, { ordenTrabajoId: ordenId, tipo: "CERTIFICADO_RECARGA" });
+      }
+
+      const pagina = await listCertificadosPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor, ordenId } = await setupOrdenFinalizada();
+      for (let i = 0; i < 5; i++) {
+        await emitirCertificado(adminActor, { ordenTrabajoId: ordenId, tipo: "CERTIFICADO_RECARGA" });
+      }
+
+      const pagina1 = await listCertificadosPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listCertificadosPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((c) => c.id));
+      const idsPagina2 = new Set(pagina2.items.map((c) => c.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor, ordenId } = await setupOrdenFinalizada();
+      await emitirCertificado(adminActor, { ordenTrabajoId: ordenId, tipo: "CERTIFICADO_RECARGA" });
+
+      const pagina = await listCertificadosPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un técnico (alcance PROPIO) sólo ve sus propios certificados en el listado paginado", async () => {
+      // A diferencia de CLIENTES (donde cualquier alcance distinto de TODAS se
+      // trata como "sin visibilidad", ver requireScopeTodasOrDeny en
+      // clientes/service.ts), CERTIFICADOS sí resuelve el alcance PROPIO: filtra
+      // por responsableTecnicoId en vez de devolver la lista vacía.
+      const { tenant, adminActor, ordenId } = await setupOrdenFinalizada();
+      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+
+      const propio = await emitirCertificado(adminActor, {
+        ordenTrabajoId: ordenId,
+        tipo: "CERTIFICADO_RECARGA",
+        responsableTecnicoId: tecnico.usuarioId,
+      });
+      await emitirCertificado(adminActor, { ordenTrabajoId: ordenId, tipo: "ACTA_ENTREGA" });
+
+      const pagina = await listCertificadosPaginado(tecnico, { page: 1 });
+
+      expect(pagina.items.map((c) => c.id)).toEqual([propio.id]);
+      expect(pagina.total).toBe(1);
     });
   });
 });

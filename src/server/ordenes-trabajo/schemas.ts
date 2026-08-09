@@ -58,6 +58,11 @@ export const agregarItemOrdenSchema = z.object({
 });
 export type AgregarItemOrdenInput = z.input<typeof agregarItemOrdenSchema>;
 
+export const actualizarCantidadItemSchema = z.object({
+  cantidad: z.number().int().positive("La cantidad debe ser mayor a cero"),
+});
+export type ActualizarCantidadItemInput = z.input<typeof actualizarCantidadItemSchema>;
+
 export const finalizarOrdenSchema = z.object({
   resultadoTecnico: z.string().trim().min(1, "El resultado técnico es obligatorio para finalizar"),
   horasTrabajadas: z.number().nonnegative().optional(),

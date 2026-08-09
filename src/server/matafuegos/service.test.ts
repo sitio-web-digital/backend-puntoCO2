@@ -12,6 +12,7 @@ import {
   createMatafuego,
   updateMatafuego,
   listMatafuegos,
+  listMatafuegosPaginado,
   getMatafuego,
   darDeBajaMatafuego,
   moverMatafuego,
@@ -282,5 +283,59 @@ describe("inventario técnico de matafuegos (RF-04)", () => {
 
     const activos = await listMatafuegos(adminActor, { estado: "PENDIENTE_DE_CONTROL" });
     expect(activos.map((m) => m.id)).toEqual([m2.id]);
+  });
+
+  describe("listado paginado", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor, cliente, establecimiento } = await setupTenantCompleto();
+      for (let i = 0; i < 5; i++) {
+        await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
+      }
+
+      const pagina = await listMatafuegosPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor, cliente, establecimiento } = await setupTenantCompleto();
+      for (let i = 0; i < 5; i++) {
+        await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
+      }
+
+      const pagina1 = await listMatafuegosPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listMatafuegosPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((m) => m.id));
+      const idsPagina2 = new Set(pagina2.items.map((m) => m.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor, cliente, establecimiento } = await setupTenantCompleto();
+      await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
+
+      const pagina = await listMatafuegosPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un rol con alcance distinto de TODAS no ve nada en el listado paginado (fail closed)", async () => {
+      // Igual que listMatafuegos: "Técnico de campo" tiene MATAFUEGOS:VER con
+      // alcance no-TODAS, que acá se trata como sin visibilidad.
+      const { tenant, adminActor, cliente, establecimiento } = await setupTenantCompleto();
+      await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
+      const tecnicoActor = await crearActorConRol(tenant.id, "Técnico de campo");
+
+      const pagina = await listMatafuegosPaginado(tecnicoActor, { page: 1 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(0);
+    });
   });
 });

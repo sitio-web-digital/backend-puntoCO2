@@ -6,6 +6,7 @@ import { conSavepoint } from "../db/savepoint";
 import { writeAudit } from "../audit/log";
 import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
+import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import type { TenantActor } from "../clientes/service";
 import { generateQrToken } from "../qr/token";
 import { generarNotificacion } from "../notificaciones/service";
@@ -133,6 +134,34 @@ export async function listCertificados(
       });
     }
     return [];
+  });
+}
+
+export async function listCertificadosPaginado(
+  actor: TenantActor,
+  filtros: { estado?: EstadoCertificado; clienteId?: string; tipo?: TipoCertificado } & PaginationParams = {},
+) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+
+    if (scope !== "TODAS" && scope !== "PROPIO") {
+      return toPaginatedResult([], 0, 1, pageSize);
+    }
+
+    const where = {
+      ...(filtros.estado ? { estado: filtros.estado } : {}),
+      ...(filtros.clienteId ? { clienteId: filtros.clienteId } : {}),
+      ...(filtros.tipo ? { tipo: filtros.tipo } : {}),
+      ...(scope === "PROPIO" ? { responsableTecnicoId: actor.usuarioId } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      tx.certificado.findMany({ where, orderBy: { numero: "desc" }, include: { unidades: true }, skip, take }),
+      tx.certificado.count({ where }),
+    ]);
+    return toPaginatedResult(items, total, page, pageSize);
   });
 }
 

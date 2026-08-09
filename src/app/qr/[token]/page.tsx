@@ -1,4 +1,6 @@
-import { resolveQrPublico } from "@/server/qr/service";
+import Link from "next/link";
+import { resolveQrPublico, resolveMatafuegoIdYTenant, type QrPublicView } from "@/server/qr/service";
+import { getCurrentUser } from "@/server/auth/current-user";
 
 const ESTADO_LABEL: Record<string, string> = {
   INSTALADO: "Instalado",
@@ -26,63 +28,93 @@ function formatFecha(fecha: Date | null): string {
 export default async function QrPublicoPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
-  let vista;
+  let vista: QrPublicView;
   try {
     vista = await resolveQrPublico(token);
   } catch {
     return (
       <main className="login-shell">
-        <div className="card login-card stack">
-          <h1>Código no reconocido</h1>
-          <p className="muted">Este código QR no corresponde a ninguna unidad registrada.</p>
+        <div className="login-card">
+          <div className="login-card-accent" />
+          <div className="login-card-body stack">
+            <h1>Código no reconocido</h1>
+            <p className="muted">Este código QR no corresponde a ninguna unidad registrada.</p>
+          </div>
         </div>
       </main>
     );
   }
 
+  const [user, matafuegoTenant] = await Promise.all([getCurrentUser(), resolveMatafuegoIdYTenant(token)]);
+  const linkFichaCompleta =
+    user && user.tenantId && matafuegoTenant && user.tenantId === matafuegoTenant.tenantId
+      ? `/matafuegos/${matafuegoTenant.matafuegoId}`
+      : null;
+
   return (
     <main className="login-shell">
-      <div className="card login-card stack">
-        <div className="stack" style={{ gap: 4 }}>
-          <p className="muted" style={{ marginBottom: 0 }}>
-            Matafuego
-          </p>
-          <h1>{vista.tipo.replace(/_/g, " ")}</h1>
-          <span className={`badge badge-${vista.estado.toLowerCase()}`} style={{ width: "fit-content" }}>
-            {ESTADO_LABEL[vista.estado] ?? vista.estado}
-          </span>
-        </div>
+      <div className="login-card">
+        <div className="login-card-accent" />
+        <div className="login-card-body">
+          <div className="stack" style={{ gap: 10 }}>
+            <span className="mono" style={{ fontSize: 11.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-3)" }}>
+              Matafuego
+            </span>
+            <h1 style={{ fontSize: 25 }}>{vista.tipo.replace(/_/g, " ")}</h1>
+            <span className={`badge badge-${vista.estado.toLowerCase()}`} style={{ width: "fit-content" }}>
+              {ESTADO_LABEL[vista.estado] ?? vista.estado}
+            </span>
+          </div>
 
-        <div className="stack" style={{ gap: 8 }}>
-          <div className="row-between">
-            <span className="muted">Agente extintor</span>
-            <span>{vista.agenteExtintor.replace(/_/g, " ")}</span>
+          <div className="stack" style={{ gap: 0, borderTop: "1px solid var(--border)", marginTop: 24 }}>
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+              <span className="muted">Agente extintor</span>
+              <span className="mono" style={{ fontWeight: 500 }}>
+                {vista.agenteExtintor.replace(/_/g, " ")}
+              </span>
+            </div>
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+              <span className="muted">Capacidad</span>
+              <span className="mono" style={{ fontWeight: 500 }}>
+                {vista.capacidadNominal ?? "No especificada"}
+              </span>
+            </div>
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+              <span className="muted">Próxima inspección</span>
+              <span className="mono" style={{ fontWeight: 500 }}>
+                {formatFecha(vista.proximaInspeccion)}
+              </span>
+            </div>
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+              <span className="muted">Próximo mantenimiento</span>
+              <span className="mono" style={{ fontWeight: 500 }}>
+                {formatFecha(vista.proximoMantenimiento)}
+              </span>
+            </div>
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+              <span className="muted">Próxima recarga</span>
+              <span className="mono" style={{ fontWeight: 500 }}>
+                {formatFecha(vista.proximaRecarga)}
+              </span>
+            </div>
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+              <span className="muted">Próxima prueba hidráulica</span>
+              <span className="mono" style={{ fontWeight: 500 }}>
+                {formatFecha(vista.proximaPruebaHidraulica)}
+              </span>
+            </div>
           </div>
-          <div className="row-between">
-            <span className="muted">Capacidad</span>
-            <span>{vista.capacidadNominal ?? "No especificada"}</span>
-          </div>
-          <div className="row-between">
-            <span className="muted">Próxima inspección</span>
-            <span>{formatFecha(vista.proximaInspeccion)}</span>
-          </div>
-          <div className="row-between">
-            <span className="muted">Próximo mantenimiento</span>
-            <span>{formatFecha(vista.proximoMantenimiento)}</span>
-          </div>
-          <div className="row-between">
-            <span className="muted">Próxima recarga</span>
-            <span>{formatFecha(vista.proximaRecarga)}</span>
-          </div>
-          <div className="row-between">
-            <span className="muted">Próxima prueba hidráulica</span>
-            <span>{formatFecha(vista.proximaPruebaHidraulica)}</span>
-          </div>
-        </div>
 
-        <p className="muted" style={{ fontSize: "0.8rem" }}>
-          ¿Sos técnico de la empresa responsable? Iniciá sesión para ver la ficha completa y registrar novedades.
-        </p>
+          {linkFichaCompleta ? (
+            <Link href={linkFichaCompleta} className="btn-primary" style={{ marginTop: 24, display: "flex", justifyContent: "center" }}>
+              Ingresar a la ficha completa →
+            </Link>
+          ) : (
+            <p className="muted" style={{ fontSize: 12, color: "var(--text-3)", marginTop: 24, marginBottom: 0 }}>
+              ¿Sos técnico de la empresa responsable? Iniciá sesión para ver la ficha completa y registrar novedades.
+            </p>
+          )}
+        </div>
       </div>
     </main>
   );

@@ -17,6 +17,7 @@ import {
   registrarEntrega,
   cancelarRetiroEntrega,
   listRetirosEntregas,
+  listRetirosEntregasPaginado,
   getRetiroEntrega,
   RetiroEntregaNotFoundError,
   MatafuegoAsociadoNotFoundError,
@@ -273,6 +274,88 @@ describe("retiro, traslado y cadena de custodia (RF-12)", () => {
       const registro = await registrarRetiro(actorA, { matafuegoId: matafuego.id });
 
       await expect(getRetiroEntrega(actorB, registro.id)).rejects.toThrow();
+    });
+  });
+
+  describe("listado paginado", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor, cliente, establecimiento } = await setupBase();
+      for (let i = 0; i < 5; i++) {
+        const matafuego = await createMatafuego(adminActor, {
+          codigoInterno: `MAT-PAG-${i}`,
+          numeroSerie: `SN-PAG-${i}`,
+          clienteId: cliente.id,
+          establecimientoId: establecimiento.id,
+          tipo: "PORTATIL",
+          agenteExtintor: "CO2",
+        });
+        await registrarRetiro(adminActor, { matafuegoId: matafuego.id });
+      }
+
+      const pagina = await listRetirosEntregasPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor, cliente, establecimiento } = await setupBase();
+      for (let i = 0; i < 5; i++) {
+        const matafuego = await createMatafuego(adminActor, {
+          codigoInterno: `MAT-PAG2-${i}`,
+          numeroSerie: `SN-PAG2-${i}`,
+          clienteId: cliente.id,
+          establecimientoId: establecimiento.id,
+          tipo: "PORTATIL",
+          agenteExtintor: "CO2",
+        });
+        await registrarRetiro(adminActor, { matafuegoId: matafuego.id });
+      }
+
+      const pagina1 = await listRetirosEntregasPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listRetirosEntregasPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((r) => r.id));
+      const idsPagina2 = new Set(pagina2.items.map((r) => r.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor, matafuego } = await setupBase();
+      await registrarRetiro(adminActor, { matafuegoId: matafuego.id });
+
+      const pagina = await listRetirosEntregasPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un técnico (alcance PROPIO) sólo ve en el listado paginado los registros que tiene bajo su custodia", async () => {
+      // Igual que en listRetirosEntregas ("visibilidad y alcance" arriba):
+      // "Técnico de campo" tiene alcance PROPIO resoluble para este recurso,
+      // así que ve sus propios registros en vez de una lista vacía.
+      const { tenant, adminActor, matafuego, cliente, establecimiento } = await setupBase();
+      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+
+      const propio = await registrarRetiro(tecnico, { matafuegoId: matafuego.id });
+
+      const matafuego2 = await createMatafuego(adminActor, {
+        codigoInterno: "MAT-OTRO-PAG",
+        numeroSerie: "SN-OTRO-PAG",
+        clienteId: cliente.id,
+        establecimientoId: establecimiento.id,
+        tipo: "PORTATIL",
+        agenteExtintor: "CO2",
+      });
+      await registrarRetiro(adminActor, { matafuegoId: matafuego2.id });
+
+      const pagina = await listRetirosEntregasPaginado(tecnico, { page: 1 });
+
+      expect(pagina.items.map((r) => r.id)).toEqual([propio.id]);
+      expect(pagina.total).toBe(1);
     });
   });
 });

@@ -113,6 +113,30 @@ describe("login (RF-27)", () => {
     expect(result).toEqual({ ok: false, reason: "tenant_inactive" });
   });
 
+  it("un TRIAL con vigencia vencida se pasa automáticamente a VENCIDO al intentar loguear, y bloquea el login", async () => {
+    const { tenant, usuarioAdmin, password } = await setupTenantWithAdmin();
+    const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { vigenciaHasta: ayer } });
+
+    const result = await login({ slug: tenant.slug, email: usuarioAdmin.email, password });
+    expect(result).toEqual({ ok: false, reason: "tenant_inactive" });
+
+    const actualizado = await prisma.tenant.findUnique({ where: { id: tenant.id } });
+    expect(actualizado?.estado).toBe("VENCIDO");
+  });
+
+  it("un VENCIDO hace más de 2 días se pasa automáticamente a SUSPENDIDO al intentar loguear", async () => {
+    const { tenant, usuarioAdmin, password } = await setupTenantWithAdmin();
+    const haceTresDias = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { estado: "VENCIDO", vencidoDesde: haceTresDias } });
+
+    const result = await login({ slug: tenant.slug, email: usuarioAdmin.email, password });
+    expect(result).toEqual({ ok: false, reason: "tenant_inactive" });
+
+    const actualizado = await prisma.tenant.findUnique({ where: { id: tenant.id } });
+    expect(actualizado?.estado).toBe("SUSPENDIDO");
+  });
+
   it("bloquea el login de un usuario suspendido dentro de un tenant activo", async () => {
     const { tenant, usuarioAdmin, password } = await setupTenantWithAdmin();
     await withTenant({ tenantId: tenant.id }, (tx) => tx.usuario.update({ where: { id: usuarioAdmin.id }, data: { estado: "SUSPENDIDO" } }));

@@ -5,6 +5,7 @@ import { conSavepoint } from "../db/savepoint";
 import { writeAudit } from "../audit/log";
 import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
+import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import type { TenantActor } from "../clientes/service";
 import { getServicioSeleccionable, resolverPrecioVigente } from "../servicios/service";
 import { generarNotificacion } from "../notificaciones/service";
@@ -15,12 +16,14 @@ import {
   registrarAvanceTecnicoSchema,
   asignarTecnicoSchema,
   agregarItemOrdenSchema,
+  actualizarCantidadItemSchema,
   finalizarOrdenSchema,
   type CreateOrdenTrabajoInput,
   type UpdateOrdenTrabajoInput,
   type CrearOrdenDesdeOrigenInput,
   type RegistrarAvanceTecnicoInput,
   type AgregarItemOrdenInput,
+  type ActualizarCantidadItemInput,
   type FinalizarOrdenInput,
 } from "./schemas";
 
@@ -203,6 +206,35 @@ export async function listOrdenesTrabajo(
       });
     }
     return [];
+  });
+}
+
+export async function listOrdenesTrabajoPaginado(
+  actor: TenantActor,
+  filtros: { estado?: EstadoOrdenTrabajo; clienteId?: string } & PaginationParams = {},
+) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+
+    const filtrosBase: Prisma.OrdenTrabajoWhereInput = {
+      ...(filtros.estado ? { estado: filtros.estado } : {}),
+      ...(filtros.clienteId ? { clienteId: filtros.clienteId } : {}),
+    };
+
+    if (scope !== "TODAS" && scope !== "PROPIO") {
+      return toPaginatedResult([], 0, 1, paginationArgs(filtros).pageSize);
+    }
+
+    const where: Prisma.OrdenTrabajoWhereInput =
+      scope === "PROPIO" ? { ...filtrosBase, tecnicoAsignadoId: actor.usuarioId } : filtrosBase;
+
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+    const [items, total] = await Promise.all([
+      tx.ordenTrabajo.findMany({ where, orderBy: { numero: "desc" }, include: { items: true, unidades: true }, skip, take }),
+      tx.ordenTrabajo.count({ where }),
+    ]);
+    return toPaginatedResult(items, total, page, pageSize);
   });
 }
 
@@ -702,6 +734,41 @@ export async function agregarItemOrden(actor: TenantActor, ordenId: string, rawI
     });
 
     return item;
+  });
+}
+
+/** Sólo cambia la cantidad (y recalcula el subtotal a partir del
+ * precioUnitario ya fijado): cambiar de servicio implica quitar el ítem y
+ * agregar uno nuevo, para no perder el snapshot de precio/descripción. */
+export async function actualizarCantidadItemOrden(actor: TenantActor, ordenId: string, itemId: string, rawInput: ActualizarCantidadItemInput) {
+  const input = actualizarCantidadItemSchema.parse(rawInput);
+
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "EDITAR");
+
+    const orden = await tx.ordenTrabajo.findUnique({ where: { id: ordenId } });
+    if (!orden) throw new OrdenTrabajoNotFoundError(ordenId);
+    if (!puedeEditar(scope, orden, actor)) throw new ForbiddenError(RECURSO, "EDITAR");
+    if (!ESTADOS_EDITABLES.includes(orden.estado)) throw new EstadoOrdenNoPermiteEdicionInvalidoError(orden.estado);
+
+    const item = await tx.ordenTrabajoItem.findFirst({ where: { id: itemId, ordenId } });
+    if (!item) return null;
+
+    const subtotal = item.precioUnitario.toNumber() * input.cantidad;
+    const actualizado = await tx.ordenTrabajoItem.update({ where: { id: itemId }, data: { cantidad: input.cantidad, subtotal } });
+
+    await writeAudit(tx, {
+      tenantId: actor.tenantId,
+      usuarioId: actor.usuarioId,
+      accion: "UPDATE",
+      entidad: "OrdenTrabajoItem",
+      entidadId: itemId,
+      valorAnterior: { cantidad: item.cantidad, subtotal: item.subtotal.toString() },
+      valorNuevo: { cantidad: actualizado.cantidad, subtotal: actualizado.subtotal.toString() },
+    });
+
+    return actualizado;
   });
 }
 

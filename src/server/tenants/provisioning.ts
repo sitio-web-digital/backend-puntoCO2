@@ -19,9 +19,10 @@ export const createTenantSchema = z.object({
   adminPassword: z.string().min(12, "La contraseña debe tener al menos 12 caracteres"),
   adminNombre: z.string().trim().min(1).max(100),
   adminApellido: z.string().trim().min(1).max(100),
+  trialDias: z.number().int().min(1).max(365).default(14),
 });
 
-export type CreateTenantInput = z.infer<typeof createTenantSchema>;
+export type CreateTenantInput = z.input<typeof createTenantSchema>;
 
 export class SlugAlreadyExistsError extends Error {
   constructor(slug: string) {
@@ -55,6 +56,7 @@ interface CreateTenantActor {
 export async function createTenant(rawInput: CreateTenantInput, actor: CreateTenantActor) {
   const input = createTenantSchema.parse(rawInput);
   const passwordHash = await hashPassword(input.adminPassword);
+  const vigenciaHasta = new Date(Date.now() + input.trialDias * 24 * 60 * 60 * 1000);
 
   try {
     return await withTenant({ tenantId: null, bypassRls: true }, async (tx: TenantTx) => {
@@ -64,6 +66,7 @@ export async function createTenant(rawInput: CreateTenantInput, actor: CreateTen
           slug: input.slug,
           cuit: input.cuit ?? null,
           estado: "TRIAL",
+          vigenciaHasta,
         },
       });
 
@@ -82,6 +85,7 @@ export async function createTenant(rawInput: CreateTenantInput, actor: CreateTen
           apellido: input.adminApellido,
           roles: { create: { rolId: adminRolId } },
         },
+        omit: { passwordHash: true },
       });
 
       await writeAudit(tx, {

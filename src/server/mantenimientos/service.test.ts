@@ -11,11 +11,13 @@ import { ForbiddenError } from "../rbac/permissions";
 import {
   crearReglaMantenimiento,
   listReglasMantenimiento,
+  listReglasMantenimientoPaginado,
   desactivarReglaMantenimiento,
   calcularProximoMantenimiento,
   crearMantenimientoDesdeRegla,
   crearMantenimientoProgramado,
   listMantenimientos,
+  listMantenimientosPaginado,
   getMantenimiento,
   reprogramarMantenimiento,
   marcarMantenimientoRealizado,
@@ -379,6 +381,133 @@ describe("programación de mantenimientos (RF-08)", () => {
       });
 
       await expect(getMantenimiento(actorB, mantenimiento.id)).rejects.toThrow();
+    });
+  });
+
+  describe("calendario paginado", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor, matafuego } = await setupMatafuego();
+      for (let i = 0; i < 5; i++) {
+        await crearMantenimientoProgramado(adminActor, {
+          matafuegoId: matafuego.id,
+          tipoServicio: "MANTENIMIENTO",
+          fechaProgramada: new Date(Date.now() + (i + 1) * 86_400_000),
+        });
+      }
+
+      const pagina = await listMantenimientosPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor, matafuego } = await setupMatafuego();
+      for (let i = 0; i < 5; i++) {
+        await crearMantenimientoProgramado(adminActor, {
+          matafuegoId: matafuego.id,
+          tipoServicio: "MANTENIMIENTO",
+          fechaProgramada: new Date(Date.now() + (i + 1) * 86_400_000),
+        });
+      }
+
+      const pagina1 = await listMantenimientosPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listMantenimientosPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((m) => m.id));
+      const idsPagina2 = new Set(pagina2.items.map((m) => m.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor, matafuego } = await setupMatafuego();
+      await crearMantenimientoProgramado(adminActor, {
+        matafuegoId: matafuego.id,
+        tipoServicio: "MANTENIMIENTO",
+        fechaProgramada: new Date(Date.now() + 86_400_000),
+      });
+
+      const pagina = await listMantenimientosPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un técnico (alcance PROPIO) sólo ve en el paginado lo que tiene asignado", async () => {
+      const { tenant, adminActor, matafuego } = await setupMatafuego();
+      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+
+      const asignado = await crearMantenimientoProgramado(adminActor, {
+        matafuegoId: matafuego.id,
+        tipoServicio: "MANTENIMIENTO",
+        fechaProgramada: new Date(Date.now() + 86_400_000),
+        tecnicoAsignadoId: tecnico.usuarioId,
+      });
+      await crearMantenimientoProgramado(adminActor, {
+        matafuegoId: matafuego.id,
+        tipoServicio: "MANTENIMIENTO",
+        fechaProgramada: new Date(Date.now() + 2 * 86_400_000),
+      });
+
+      const pagina = await listMantenimientosPaginado(tecnico, { page: 1 });
+
+      expect(pagina.items.map((m) => m.id)).toEqual([asignado.id]);
+      expect(pagina.total).toBe(1);
+    });
+  });
+
+  describe("reglas paginado", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor } = await setupMatafuego();
+      for (let i = 0; i < 5; i++) {
+        await crearReglaMantenimiento(adminActor, { tipoServicio: "RECARGA", frecuenciaMeses: 12 + i });
+      }
+
+      const pagina = await listReglasMantenimientoPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor } = await setupMatafuego();
+      for (let i = 0; i < 5; i++) {
+        await crearReglaMantenimiento(adminActor, { tipoServicio: "RECARGA", frecuenciaMeses: 12 + i });
+      }
+
+      const pagina1 = await listReglasMantenimientoPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listReglasMantenimientoPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((r) => r.id));
+      const idsPagina2 = new Set(pagina2.items.map((r) => r.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor } = await setupMatafuego();
+      await crearReglaMantenimiento(adminActor, { tipoServicio: "RECARGA", frecuenciaMeses: 12 });
+
+      const pagina = await listReglasMantenimientoPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un técnico (alcance PROPIO en VER) no ve nada en el paginado de reglas: es un recurso administrativo (fail closed)", async () => {
+      const { tenant, adminActor } = await setupMatafuego();
+      await crearReglaMantenimiento(adminActor, { tipoServicio: "RECARGA", frecuenciaMeses: 12 });
+      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+
+      const pagina = await listReglasMantenimientoPaginado(tecnico, { page: 1 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(0);
     });
   });
 });

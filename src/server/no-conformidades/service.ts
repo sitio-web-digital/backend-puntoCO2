@@ -6,6 +6,7 @@ import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
 import type { AlcancePermiso } from "@prisma/client";
 import type { TenantActor } from "../clientes/service";
+import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import { esResultadoNoConforme } from "../inspecciones/service";
 import {
   createNoConformidadSchema,
@@ -110,6 +111,43 @@ export async function listNoConformidades(actor: TenantActor, filtros: { matafue
       });
     }
     return [];
+  });
+}
+
+export async function listNoConformidadesPaginado(
+  actor: TenantActor,
+  filtros: { matafuegoId?: string; estado?: EstadoNoConformidad } & PaginationParams = {},
+) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+
+    const filtrosBase: Prisma.NoConformidadWhereInput = {
+      ...(filtros.matafuegoId ? { matafuegoId: filtros.matafuegoId } : {}),
+      ...(filtros.estado ? { estado: filtros.estado } : {}),
+    };
+
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+
+    if (scope === "TODAS") {
+      const [items, total] = await Promise.all([
+        tx.noConformidad.findMany({ where: filtrosBase, orderBy: { createdAt: "desc" }, skip, take }),
+        tx.noConformidad.count({ where: filtrosBase }),
+      ]);
+      return toPaginatedResult(items, total, page, pageSize);
+    }
+    if (scope === "PROPIO") {
+      const where: Prisma.NoConformidadWhereInput = {
+        ...filtrosBase,
+        OR: [{ detectadaPorId: actor.usuarioId }, { responsableId: actor.usuarioId }],
+      };
+      const [items, total] = await Promise.all([
+        tx.noConformidad.findMany({ where, orderBy: { createdAt: "desc" }, skip, take }),
+        tx.noConformidad.count({ where }),
+      ]);
+      return toPaginatedResult(items, total, page, pageSize);
+    }
+    return toPaginatedResult([], 0, 1, pageSize);
   });
 }
 

@@ -4,15 +4,18 @@ import { withTenant } from "../db/with-tenant";
 import { writeAudit } from "../audit/log";
 import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
+import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import type { TenantActor } from "../clientes/service";
 import {
   createServicioSchema,
   updateServicioSchema,
   createListaPrecioSchema,
+  updateListaPrecioSchema,
   fijarPrecioSchema,
   type CreateServicioInput,
   type UpdateServicioInput,
   type CreateListaPrecioInput,
+  type UpdateListaPrecioInput,
   type FijarPrecioInput,
 } from "./schemas";
 
@@ -116,6 +119,27 @@ export async function listServicios(actor: TenantActor, filtros: { estado?: Esta
       where: { ...(filtros.estado ? { estado: filtros.estado } : {}), ...(filtros.categoria ? { categoria: filtros.categoria } : {}) },
       orderBy: { nombre: "asc" },
     });
+  });
+}
+
+export async function listServiciosPaginado(
+  actor: TenantActor,
+  filtros: { estado?: EstadoServicio; categoria?: CategoriaServicio } & PaginationParams = {},
+) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+    if (scope !== "TODAS") {
+      return toPaginatedResult([], 0, 1, paginationArgs(filtros).pageSize);
+    }
+
+    const where = { ...(filtros.estado ? { estado: filtros.estado } : {}), ...(filtros.categoria ? { categoria: filtros.categoria } : {}) };
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+    const [items, total] = await Promise.all([
+      tx.servicio.findMany({ where, orderBy: { nombre: "asc" }, skip, take }),
+      tx.servicio.count({ where }),
+    ]);
+    return toPaginatedResult(items, total, page, pageSize);
   });
 }
 
@@ -249,6 +273,100 @@ export async function listListasPrecio(actor: TenantActor) {
 
     return tx.listaPrecio.findMany({ orderBy: { nombre: "asc" } });
   });
+}
+
+export async function listListasPrecioPaginado(actor: TenantActor, filtros: PaginationParams = {}) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+    if (scope !== "TODAS") {
+      return toPaginatedResult([], 0, 1, paginationArgs(filtros).pageSize);
+    }
+
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+    const [items, total] = await Promise.all([
+      tx.listaPrecio.findMany({ orderBy: { nombre: "asc" }, skip, take }),
+      tx.listaPrecio.count(),
+    ]);
+    return toPaginatedResult(items, total, page, pageSize);
+  });
+}
+
+export async function getListaPrecio(actor: TenantActor, id: string) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+    if (scope !== "TODAS") return null;
+
+    const lista = await tx.listaPrecio.findUnique({ where: { id }, include: { precios: true } });
+    if (!lista) throw new ListaPrecioNotFoundError(id);
+    return lista;
+  });
+}
+
+export async function updateListaPrecio(actor: TenantActor, id: string, rawInput: UpdateListaPrecioInput) {
+  const input = updateListaPrecioSchema.parse(rawInput);
+
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "EDITAR");
+    requireScopeTodas(scope, "EDITAR");
+
+    const existing = await tx.listaPrecio.findUnique({ where: { id } });
+    if (!existing) throw new ListaPrecioNotFoundError(id);
+
+    if (input.nombre && input.nombre !== existing.nombre) {
+      await assertNombreListaDisponible(tx, input.nombre);
+    }
+
+    const actualizada = await tx.listaPrecio.update({ where: { id }, data: input as Prisma.ListaPrecioUncheckedUpdateInput });
+
+    await writeAudit(tx, {
+      tenantId: actor.tenantId,
+      usuarioId: actor.usuarioId,
+      accion: "UPDATE",
+      entidad: "ListaPrecio",
+      entidadId: id,
+      valorAnterior: existing,
+      valorNuevo: actualizada,
+    });
+
+    return actualizada;
+  });
+}
+
+async function cambiarEstadoListaPrecio(actor: TenantActor, id: string, nuevoEstado: "ACTIVA" | "INACTIVA", motivo?: string) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "EDITAR");
+    requireScopeTodas(scope, "EDITAR");
+
+    const existing = await tx.listaPrecio.findUnique({ where: { id } });
+    if (!existing) throw new ListaPrecioNotFoundError(id);
+
+    const actualizada = await tx.listaPrecio.update({ where: { id }, data: { estado: nuevoEstado } });
+
+    await writeAudit(tx, {
+      tenantId: actor.tenantId,
+      usuarioId: actor.usuarioId,
+      accion: "STATUS_CHANGE",
+      entidad: "ListaPrecio",
+      entidadId: id,
+      valorAnterior: { estado: existing.estado },
+      valorNuevo: { estado: nuevoEstado },
+      motivo,
+    });
+
+    return actualizada;
+  });
+}
+
+export function desactivarListaPrecio(actor: TenantActor, id: string, motivo?: string) {
+  return cambiarEstadoListaPrecio(actor, id, "INACTIVA", motivo);
+}
+
+export function reactivarListaPrecio(actor: TenantActor, id: string, motivo?: string) {
+  return cambiarEstadoListaPrecio(actor, id, "ACTIVA", motivo);
 }
 
 /**

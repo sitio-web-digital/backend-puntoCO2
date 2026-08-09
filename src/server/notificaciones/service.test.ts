@@ -15,6 +15,7 @@ import {
   procesarNotificacionesPendientes,
   escanearVencimientosYGenerarNotificaciones,
   listNotificaciones,
+  listNotificacionesPaginado,
   getNotificacion,
   marcarNotificacionLeida,
   cancelarNotificacion,
@@ -440,6 +441,93 @@ describe("notificaciones automáticas (RF-19)", () => {
       void actorA;
 
       await expect(getNotificacion(actorB, creada!.id)).rejects.toThrow();
+    });
+  });
+
+  describe("listado paginado", () => {
+    async function crearNotificaciones(tenantId: string, cantidad: number) {
+      for (let i = 0; i < cantidad; i++) {
+        await withTenant({ tenantId }, (tx) =>
+          generarNotificacion(tx, {
+            tenantId,
+            evento: "ORDEN_PROGRAMADA",
+            canal: "EMAIL",
+            entidadTipo: "OrdenTrabajo",
+            entidadId: `orden-paginado-${i}`,
+            plantilla: "orden_programada",
+          }),
+        );
+      }
+    }
+
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { tenant, adminActor } = await setupBase();
+      await crearNotificaciones(tenant.id, 5);
+
+      const pagina = await listNotificacionesPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { tenant, adminActor } = await setupBase();
+      await crearNotificaciones(tenant.id, 5);
+
+      const pagina1 = await listNotificacionesPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listNotificacionesPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((n) => n.id));
+      const idsPagina2 = new Set(pagina2.items.map((n) => n.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { tenant, adminActor } = await setupBase();
+      await crearNotificaciones(tenant.id, 1);
+
+      const pagina = await listNotificacionesPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un técnico (alcance PROPIO) sólo ve sus propias notificaciones en el listado paginado", async () => {
+      // Igual que CERTIFICADOS (y a diferencia de CLIENTES): el alcance PROPIO
+      // no es "sin visibilidad", filtra por usuarioId en vez de devolver vacío.
+      const { tenant, adminActor } = await setupBase();
+      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+
+      const propia = await withTenant({ tenantId: tenant.id }, (tx) =>
+        generarNotificacion(tx, {
+          tenantId: tenant.id,
+          evento: "ORDEN_PROGRAMADA",
+          canal: "EMAIL",
+          usuarioId: tecnico.usuarioId,
+          entidadTipo: "OrdenTrabajo",
+          entidadId: "orden-1",
+          plantilla: "orden_programada",
+        }),
+      );
+      await withTenant({ tenantId: tenant.id }, (tx) =>
+        generarNotificacion(tx, {
+          tenantId: tenant.id,
+          evento: "ORDEN_PROGRAMADA",
+          canal: "EMAIL",
+          usuarioId: adminActor.usuarioId,
+          entidadTipo: "OrdenTrabajo",
+          entidadId: "orden-2",
+          plantilla: "orden_programada",
+        }),
+      );
+
+      const pagina = await listNotificacionesPaginado(tecnico, { page: 1 });
+
+      expect(pagina.items.map((n) => n.id)).toEqual([propia!.id]);
+      expect(pagina.total).toBe(1);
     });
   });
 });

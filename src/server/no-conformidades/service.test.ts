@@ -13,6 +13,7 @@ import {
   crearNoConformidad,
   crearNoConformidadDesdeInspeccion,
   listNoConformidades,
+  listNoConformidadesPaginado,
   getNoConformidad,
   asignarResponsable,
   iniciarTratamiento,
@@ -331,5 +332,62 @@ describe("gestión de no conformidades (RF-07)", () => {
     const nc = await crearNoConformidad(actorA, ncInputBase(matafuego.id));
 
     await expect(getNoConformidad(actorB, nc.id)).rejects.toThrow();
+  });
+
+  describe("listado paginado", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor, matafuego } = await setupMatafuego();
+      for (let i = 0; i < 5; i++) {
+        await crearNoConformidad(adminActor, ncInputBase(matafuego.id, { tipoDefecto: `Defecto ${i}` }));
+      }
+
+      const pagina = await listNoConformidadesPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor, matafuego } = await setupMatafuego();
+      for (let i = 0; i < 5; i++) {
+        await crearNoConformidad(adminActor, ncInputBase(matafuego.id, { tipoDefecto: `Defecto ${i}` }));
+      }
+
+      const pagina1 = await listNoConformidadesPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listNoConformidadesPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((n) => n.id));
+      const idsPagina2 = new Set(pagina2.items.map((n) => n.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor, matafuego } = await setupMatafuego();
+      await crearNoConformidad(adminActor, ncInputBase(matafuego.id));
+
+      const pagina = await listNoConformidadesPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un técnico (alcance PROPIO) sólo ve en el paginado las que reportó o tiene asignadas", async () => {
+      const { tenant, adminActor, matafuego } = await setupMatafuego();
+      const tecnicoA = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnicoB = await crearActorConRol(tenant.id, "Técnico de campo");
+
+      const ncDeA = await crearNoConformidad(tecnicoA, ncInputBase(matafuego.id));
+      const ncAsignadaAA = await crearNoConformidad(adminActor, ncInputBase(matafuego.id));
+      await asignarResponsable(adminActor, ncAsignadaAA.id, { responsableId: tecnicoA.usuarioId });
+      await crearNoConformidad(tecnicoB, ncInputBase(matafuego.id));
+
+      const pagina = await listNoConformidadesPaginado(tecnicoA, { page: 1 });
+
+      expect(pagina.items.map((n) => n.id).sort()).toEqual([ncDeA.id, ncAsignadaAA.id].sort());
+      expect(pagina.total).toBe(2);
+    });
   });
 });

@@ -18,6 +18,7 @@ import {
   crearOrdenDesdeNoConformidad,
   crearOrdenDesdeMantenimiento,
   listOrdenesTrabajo,
+  listOrdenesTrabajoPaginado,
   getOrdenTrabajo,
   updateOrdenTrabajo,
   registrarAvanceTecnico,
@@ -34,6 +35,7 @@ import {
   cancelarOrden,
   agregarItemOrden,
   quitarItemOrden,
+  actualizarCantidadItemOrden,
   calcularTotalOrden,
   OrdenTrabajoNotFoundError,
   ClienteAsociadoNotFoundError,
@@ -251,6 +253,16 @@ describe("órdenes de trabajo (RF-11)", () => {
       const actualizada = await getOrdenTrabajo(adminActor, orden.id);
       expect(calcularTotalOrden(actualizada!.items)).toBe(15000);
     });
+
+    it("actualiza la cantidad de un ítem y recalcula el subtotal", async () => {
+      const { adminActor, cliente, servicio } = await setupBase();
+      const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
+      const item = await agregarItemOrden(adminActor, orden.id, { servicioId: servicio.id, cantidad: 1 });
+
+      const actualizado = await actualizarCantidadItemOrden(adminActor, orden.id, item.id, { cantidad: 3 });
+      expect(actualizado?.cantidad).toBe(3);
+      expect(actualizado?.subtotal.toNumber()).toBe(15000);
+    });
   });
 
   describe("ciclo de vida completo", () => {
@@ -416,6 +428,64 @@ describe("órdenes de trabajo (RF-11)", () => {
       const orden = await crearOrdenTrabajo(actorA, { clienteId: cliente.id });
 
       await expect(getOrdenTrabajo(actorB, orden.id)).rejects.toThrow();
+    });
+  });
+
+  describe("listado paginado", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor, cliente } = await setupBase();
+      for (let i = 0; i < 5; i++) {
+        await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
+      }
+
+      const pagina = await listOrdenesTrabajoPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor, cliente } = await setupBase();
+      for (let i = 0; i < 5; i++) {
+        await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
+      }
+
+      const pagina1 = await listOrdenesTrabajoPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listOrdenesTrabajoPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((o) => o.id));
+      const idsPagina2 = new Set(pagina2.items.map((o) => o.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor, cliente } = await setupBase();
+      await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
+
+      const pagina = await listOrdenesTrabajoPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un técnico (alcance PROPIO) sólo ve en el listado paginado las órdenes que tiene asignadas", async () => {
+      // A diferencia de Clientes (donde cualquier alcance != TODAS se trata
+      // como sin visibilidad porque el scope ESTABLECIMIENTO_ASIGNADO/PROPIO
+      // todavía no se puede resolver), acá "Técnico de campo" sí tiene
+      // alcance PROPIO resoluble: ve sus propias órdenes asignadas, igual que
+      // en listOrdenesTrabajo (ver test de "visibilidad y alcance" arriba).
+      const { tenant, adminActor, cliente } = await setupBase();
+      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const asignada = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id, tecnicoAsignadoId: tecnico.usuarioId });
+      await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
+
+      const pagina = await listOrdenesTrabajoPaginado(tecnico, { page: 1 });
+
+      expect(pagina.items.map((o) => o.id)).toEqual([asignada.id]);
+      expect(pagina.total).toBe(1);
     });
   });
 });

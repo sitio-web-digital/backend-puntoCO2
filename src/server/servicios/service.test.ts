@@ -9,6 +9,7 @@ import { ForbiddenError } from "../rbac/permissions";
 import {
   crearServicio,
   listServicios,
+  listServiciosPaginado,
   getServicio,
   getServicioSeleccionable,
   updateServicio,
@@ -16,6 +17,11 @@ import {
   reactivarServicio,
   crearListaPrecio,
   listListasPrecio,
+  listListasPrecioPaginado,
+  getListaPrecio,
+  updateListaPrecio,
+  desactivarListaPrecio,
+  reactivarListaPrecio,
   fijarPrecio,
   resolverPrecioVigente,
   calcularMargen,
@@ -213,6 +219,41 @@ describe("servicios y precios (RF-09)", () => {
   });
 
   describe("listas de precios e historial", () => {
+    it("obtiene una lista de precios por id", async () => {
+      const { adminActor } = await setupTenant();
+      const lista = await crearListaPrecio(adminActor, { nombre: "Mayorista" });
+
+      const obtenida = await getListaPrecio(adminActor, lista.id);
+      expect(obtenida?.nombre).toBe("Mayorista");
+    });
+
+    it("lanza ListaPrecioNotFoundError sobre un id inexistente", async () => {
+      const { adminActor } = await setupTenant();
+      await expect(getListaPrecio(adminActor, "no-existe")).rejects.toThrow(ListaPrecioNotFoundError);
+    });
+
+    it("actualiza una lista de precios y valida el nuevo nombre contra duplicados", async () => {
+      const { adminActor } = await setupTenant();
+      await crearListaPrecio(adminActor, { nombre: "Mayorista" });
+      const otra = await crearListaPrecio(adminActor, { nombre: "Minorista" });
+
+      await expect(updateListaPrecio(adminActor, otra.id, { nombre: "Mayorista" })).rejects.toThrow(NombreListaPrecioDuplicadoError);
+
+      const actualizada = await updateListaPrecio(adminActor, otra.id, { descripcion: "Lista para clientes chicos" });
+      expect(actualizada.descripcion).toBe("Lista para clientes chicos");
+    });
+
+    it("desactiva y reactiva una lista de precios", async () => {
+      const { adminActor } = await setupTenant();
+      const lista = await crearListaPrecio(adminActor, { nombre: "Mayorista" });
+
+      const desactivada = await desactivarListaPrecio(adminActor, lista.id, "fuera de temporada");
+      expect(desactivada.estado).toBe("INACTIVA");
+
+      const reactivada = await reactivarListaPrecio(adminActor, lista.id);
+      expect(reactivada.estado).toBe("ACTIVA");
+    });
+
     it("crea una lista de precios y la lista", async () => {
       const { adminActor } = await setupTenant();
       await crearListaPrecio(adminActor, { nombre: "Mayorista" });
@@ -285,5 +326,99 @@ describe("servicios y precios (RF-09)", () => {
       await expect(fijarPrecio(adminActor, "no-existe", servicio.id, { precio: 100 })).rejects.toThrow(ListaPrecioNotFoundError);
       await expect(fijarPrecio(adminActor, lista.id, "no-existe", { precio: 100 })).rejects.toThrow(ServicioNotFoundError);
     });
+  });
+
+  describe("listado paginado de servicios", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor } = await setupTenant();
+      for (let i = 0; i < 5; i++) {
+        await crearServicio(adminActor, { codigo: `RC-0${i}`, nombre: `Recarga ${i}`, categoria: "RECARGA", precioBase: 5000 });
+      }
+
+      const pagina = await listServiciosPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor } = await setupTenant();
+      for (let i = 0; i < 5; i++) {
+        await crearServicio(adminActor, { codigo: `RC-0${i}`, nombre: `Recarga ${i}`, categoria: "RECARGA", precioBase: 5000 });
+      }
+
+      const pagina1 = await listServiciosPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listServiciosPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((s) => s.id));
+      const idsPagina2 = new Set(pagina2.items.map((s) => s.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor } = await setupTenant();
+      await crearServicio(adminActor, { codigo: "RC-01", nombre: "Recarga", categoria: "RECARGA", precioBase: 5000 });
+
+      const pagina = await listServiciosPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    // No se agrega el test de "un rol con alcance distinto de TODAS no ve
+    // nada" (como en clientes/service.test.ts): en default-roles.ts todos los
+    // roles que tienen SERVICIOS_PRECIOS:VER lo tienen con alcance TODAS
+    // (Responsable técnico, Técnico de campo, Operador de taller, Comercial,
+    // Facturación, Auditor); los que no lo tienen (ej. Cobranza) lanzarían
+    // ForbiddenError en vez de devolver un listado vacío, caso ya cubierto en
+    // otros tests de este archivo.
+  });
+
+  describe("listado paginado de listas de precios", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor } = await setupTenant();
+      for (let i = 0; i < 5; i++) {
+        await crearListaPrecio(adminActor, { nombre: `Lista ${i}` });
+      }
+
+      const pagina = await listListasPrecioPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor } = await setupTenant();
+      for (let i = 0; i < 5; i++) {
+        await crearListaPrecio(adminActor, { nombre: `Lista ${i}` });
+      }
+
+      const pagina1 = await listListasPrecioPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listListasPrecioPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((l) => l.id));
+      const idsPagina2 = new Set(pagina2.items.map((l) => l.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor } = await setupTenant();
+      await crearListaPrecio(adminActor, { nombre: "Mayorista" });
+
+      const pagina = await listListasPrecioPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    // Ídem: ningún rol tiene SERVICIOS_PRECIOS:VER con alcance distinto de
+    // TODAS, así que no hay forma de escribir el test de "alcance distinto de
+    // TODAS no ve nada" sin que en realidad sea un ForbiddenError.
   });
 });

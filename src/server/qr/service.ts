@@ -66,6 +66,20 @@ export async function resolveQrPublico(token: string): Promise<QrPublicView> {
   };
 }
 
+/**
+ * Sólo para decidir server-side si mostrar el link "Ir a la ficha completa"
+ * en la página pública del QR: nunca se expone al público, a diferencia de
+ * `resolveQrPublico`. Deliberadamente no reusa esa función porque acá sí
+ * necesitamos `tenantId`, que `QrPublicView` omite a propósito.
+ */
+export async function resolveMatafuegoIdYTenant(token: string): Promise<{ matafuegoId: string; tenantId: string } | null> {
+  const matafuego = await withTenant({ tenantId: null, bypassRls: true }, (tx) =>
+    tx.matafuego.findUnique({ where: { qrToken: token }, select: { id: true, tenantId: true } }),
+  );
+  if (!matafuego) return null;
+  return { matafuegoId: matafuego.id, tenantId: matafuego.tenantId };
+}
+
 /** Emite un QR nuevo e invalida el anterior (sticker perdido/dañado). Requiere
  * alcance administrativo: es una operación sensible — cualquiera con el QR
  * viejo pierde acceso a la ficha pública apenas se regenera. */

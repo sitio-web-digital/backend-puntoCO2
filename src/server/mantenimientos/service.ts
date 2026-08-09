@@ -5,6 +5,7 @@ import { writeAudit } from "../audit/log";
 import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
 import type { TenantActor } from "../clientes/service";
+import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import {
   createReglaMantenimientoSchema,
   createMantenimientoProgramadoSchema,
@@ -122,6 +123,27 @@ export async function listReglasMantenimiento(actor: TenantActor, filtros: { tip
       ...(filtros.tipoServicio ? { where: { tipoServicio: filtros.tipoServicio } } : {}),
       orderBy: { createdAt: "desc" },
     });
+  });
+}
+
+export async function listReglasMantenimientoPaginado(
+  actor: TenantActor,
+  filtros: { tipoServicio?: TipoServicioMantenimiento } & PaginationParams = {},
+) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+    if (scope !== "TODAS") {
+      return toPaginatedResult([], 0, 1, paginationArgs(filtros).pageSize);
+    }
+
+    const where = filtros.tipoServicio ? { tipoServicio: filtros.tipoServicio } : {};
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+    const [items, total] = await Promise.all([
+      tx.reglaMantenimiento.findMany({ where, orderBy: { createdAt: "desc" }, skip, take }),
+      tx.reglaMantenimiento.count({ where }),
+    ]);
+    return toPaginatedResult(items, total, page, pageSize);
   });
 }
 
@@ -373,6 +395,41 @@ export async function listMantenimientos(
       });
     }
     return [];
+  });
+}
+
+export async function listMantenimientosPaginado(
+  actor: TenantActor,
+  filtros: { matafuegoId?: string; estado?: EstadoMantenimientoProgramado } & PaginationParams = {},
+) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+
+    const filtrosBase: Prisma.MantenimientoProgramadoWhereInput = {
+      ...(filtros.matafuegoId ? { matafuegoId: filtros.matafuegoId } : {}),
+      ...(filtros.estado ? { estado: filtros.estado } : {}),
+    };
+
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+
+    if (scope === "TODAS") {
+      // Orden de calendario: lo próximo primero, no lo último creado primero.
+      const [items, total] = await Promise.all([
+        tx.mantenimientoProgramado.findMany({ where: filtrosBase, orderBy: { fechaProgramada: "asc" }, skip, take }),
+        tx.mantenimientoProgramado.count({ where: filtrosBase }),
+      ]);
+      return toPaginatedResult(items, total, page, pageSize);
+    }
+    if (scope === "PROPIO") {
+      const where: Prisma.MantenimientoProgramadoWhereInput = { ...filtrosBase, tecnicoAsignadoId: actor.usuarioId };
+      const [items, total] = await Promise.all([
+        tx.mantenimientoProgramado.findMany({ where, orderBy: { fechaProgramada: "asc" }, skip, take }),
+        tx.mantenimientoProgramado.count({ where }),
+      ]);
+      return toPaginatedResult(items, total, page, pageSize);
+    }
+    return toPaginatedResult([], 0, 1, pageSize);
   });
 }
 

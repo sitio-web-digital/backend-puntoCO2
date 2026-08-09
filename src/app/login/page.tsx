@@ -36,40 +36,75 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="login-shell">
-      <div className="card login-card stack">
-        <div className="stack" style={{ gap: 4 }}>
-          <h1>Matafuego SaaS</h1>
-          <p className="muted">Ingresá con tu cuenta de empresa.</p>
+    <main className="auth-shell">
+      <div className="auth-brand-panel">
+        <div className="row" style={{ gap: 11 }}>
+          <div className="auth-brand-mark">M</div>
+          <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-.01em" }}>Matafuego SaaS</span>
         </div>
 
-        <form onSubmit={handleSubmit} className="stack" style={{ gap: 0 }}>
-          <div className="field">
-            <label htmlFor="slug">Empresa</label>
-            <input id="slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="demo" required autoComplete="organization" />
+        <div className="auth-brand-pitch">
+          <h1>Gestión integral de matafuegos.</h1>
+          <p>Inspección, mantenimiento, certificación y facturación en un solo lugar, con trazabilidad de punta a punta.</p>
+          <div className="auth-brand-features">
+            <span>Inspección con QR en campo</span>
+            <span>Órdenes de trabajo y cadena de custodia</span>
+            <span>Certificados con validez IRAM</span>
           </div>
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Contraseña</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
+        </div>
+
+        <span className="auth-brand-version">v1.0 · Argentina</span>
+      </div>
+
+      <div className="auth-form-panel">
+        <div className="auth-form-panel-inner">
+          <div className="stack" style={{ gap: 7 }}>
+            <h1 style={{ fontSize: 23 }}>Ingresar</h1>
+            <p className="muted">Accedé con la cuenta de tu empresa.</p>
           </div>
 
-          {error ? <p className="error">{error}</p> : null}
+          <form onSubmit={handleSubmit} className="stack" style={{ gap: 15 }}>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="slug">Empresa (identificador)</label>
+              <input
+                id="slug"
+                className="mono"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="demo"
+                required
+                autoComplete="organization"
+              />
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="email">Email</label>
+              <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" />
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="password">Contraseña</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
 
-          <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: 8 }}>
-            {loading ? "Ingresando..." : "Ingresar"}
-          </button>
-        </form>
+            {error ? <p className="error">{error}</p> : null}
+
+            <button type="submit" className="btn-primary" disabled={loading} style={{ width: "100%", marginTop: 4 }}>
+              {loading ? "Ingresando..." : "Ingresar"}
+            </button>
+          </form>
+
+          <div className="auth-hint">
+            <p className="muted" style={{ margin: 0 }}>
+              ¿Sos cliente y querés consultar el estado de tu matafuego? No necesitás cuenta: escaneá el código QR de la etiqueta.
+            </p>
+          </div>
+        </div>
       </div>
     </main>
   );

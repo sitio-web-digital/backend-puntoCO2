@@ -1,5 +1,6 @@
 import { getAccessTokenCookie } from "./cookies";
 import { verifyAccessToken } from "./tokens";
+import { ForbiddenError } from "../rbac/permissions";
 
 export interface CurrentUser {
   usuarioId: string;
@@ -43,4 +44,16 @@ export async function requireTenantUser(): Promise<CurrentUser & { tenantId: str
     throw new UnauthorizedError("Esta operación requiere un usuario de una empresa, no el superadmin SaaS");
   }
   return user as CurrentUser & { tenantId: string };
+}
+
+/** Para las rutas de plataforma (panel del Superadministrador SaaS): el
+ * único "recurso" que un usuario de un tenant nunca tiene, así que reusar
+ * ForbiddenError con TENANT_ADMIN da el mismo 403 consistente que el resto
+ * de las denegaciones de permiso, sin necesitar una clase de error nueva. */
+export async function requireSuperAdmin(): Promise<CurrentUser & { tenantId: null }> {
+  const user = await requireCurrentUser();
+  if (!user.esSuperAdminSaas) {
+    throw new ForbiddenError("TENANT_ADMIN", "VER");
+  }
+  return user as CurrentUser & { tenantId: null };
 }

@@ -5,6 +5,7 @@ import { writeAudit } from "../audit/log";
 import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
 import type { TenantActor } from "../clientes/service";
+import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import { generateQrToken } from "../qr/token";
 import {
   createMatafuegoSchema,
@@ -110,7 +111,7 @@ async function assertNumeroSerieYCodigoInternoDisponibles(tx: TenantTx, numeroSe
 
 export async function listMatafuegos(
   actor: TenantActor,
-  filtros: { estado?: EstadoMatafuego; clienteId?: string; establecimientoId?: string } = {},
+  filtros: { estado?: EstadoMatafuego; clienteId?: string; establecimientoId?: string; ids?: string[] } = {},
 ) {
   return withTenant({ tenantId: actor.tenantId }, async (tx) => {
     const effective = await getEffectivePermissions(tx, actor.usuarioId);
@@ -122,9 +123,35 @@ export async function listMatafuegos(
         ...(filtros.estado ? { estado: filtros.estado } : {}),
         ...(filtros.clienteId ? { clienteId: filtros.clienteId } : {}),
         ...(filtros.establecimientoId ? { establecimientoId: filtros.establecimientoId } : {}),
+        ...(filtros.ids ? { id: { in: filtros.ids } } : {}),
       },
       orderBy: { createdAt: "desc" },
     });
+  });
+}
+
+export async function listMatafuegosPaginado(
+  actor: TenantActor,
+  filtros: { estado?: EstadoMatafuego; clienteId?: string; establecimientoId?: string } & PaginationParams = {},
+) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+    if (scope !== "TODAS") {
+      return toPaginatedResult([], 0, 1, paginationArgs(filtros).pageSize);
+    }
+
+    const where = {
+      ...(filtros.estado ? { estado: filtros.estado } : {}),
+      ...(filtros.clienteId ? { clienteId: filtros.clienteId } : {}),
+      ...(filtros.establecimientoId ? { establecimientoId: filtros.establecimientoId } : {}),
+    };
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+    const [items, total] = await Promise.all([
+      tx.matafuego.findMany({ where, orderBy: { createdAt: "desc" }, skip, take }),
+      tx.matafuego.count({ where }),
+    ]);
+    return toPaginatedResult(items, total, page, pageSize);
   });
 }
 

@@ -26,3 +26,8 @@ test-results/
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# Material de referencia de diseño (mockups/handoff usados durante el
+# desarrollo), no es código de la app
+design-handoff/
+Matafuego SaaS (standalone)*.html

@@ -5,6 +5,7 @@ import { writeAudit } from "../audit/log";
 import { hashPassword, verifyPassword } from "./password";
 import { signAccessToken } from "./tokens";
 import { createSession } from "./session-service";
+import { aplicarVencimientoTenant } from "../platform/vencimientos";
 
 export const loginSchema = z.object({
   // Ausente = intento de login del Superadministrador SaaS (sin tenant). Presente =
@@ -61,7 +62,8 @@ async function loginTenantUser(slug: string, email: string, password: string, me
     return { ok: false, reason: "invalid_credentials" };
   }
 
-  if (!ESTADOS_TENANT_QUE_PERMITEN_LOGIN.has(tenant.estado)) {
+  const estadoActual = await withTenant({ tenantId: null, bypassRls: true }, (tx) => aplicarVencimientoTenant(tx, tenant));
+  if (!ESTADOS_TENANT_QUE_PERMITEN_LOGIN.has(estadoActual)) {
     return { ok: false, reason: "tenant_inactive" };
   }
 

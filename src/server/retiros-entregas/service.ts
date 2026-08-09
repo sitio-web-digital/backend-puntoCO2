@@ -4,6 +4,7 @@ import { withTenant } from "../db/with-tenant";
 import { writeAudit } from "../audit/log";
 import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
+import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import type { TenantActor } from "../clientes/service";
 import { generarNotificacion } from "../notificaciones/service";
 import {
@@ -126,6 +127,34 @@ export async function listRetirosEntregas(
       return tx.retiroEntrega.findMany({ where: { ...where, tecnicoResponsableId: actor.usuarioId }, orderBy: { createdAt: "desc" } });
     }
     return [];
+  });
+}
+
+export async function listRetirosEntregasPaginado(
+  actor: TenantActor,
+  filtros: { estado?: EstadoRetiroEntrega; matafuegoId?: string } & PaginationParams = {},
+) {
+  return withTenant({ tenantId: actor.tenantId }, async (tx) => {
+    const effective = await getEffectivePermissions(tx, actor.usuarioId);
+    const scope = requirePermission(effective, RECURSO, "VER");
+
+    const filtrosBase = {
+      ...(filtros.estado ? { estado: filtros.estado } : {}),
+      ...(filtros.matafuegoId ? { matafuegoId: filtros.matafuegoId } : {}),
+    };
+
+    if (scope !== "TODAS" && scope !== "PROPIO") {
+      return toPaginatedResult([], 0, 1, paginationArgs(filtros).pageSize);
+    }
+
+    const where = scope === "PROPIO" ? { ...filtrosBase, tecnicoResponsableId: actor.usuarioId } : filtrosBase;
+
+    const { page, pageSize, skip, take } = paginationArgs(filtros);
+    const [items, total] = await Promise.all([
+      tx.retiroEntrega.findMany({ where, orderBy: { createdAt: "desc" }, skip, take }),
+      tx.retiroEntrega.count({ where }),
+    ]);
+    return toPaginatedResult(items, total, page, pageSize);
   });
 }
 

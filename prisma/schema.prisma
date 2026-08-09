@@ -32,7 +32,15 @@ model Tenant {
   slug      String       @unique
   cuit      String?
   estado    EstadoTenant @default(TRIAL)
-  plan      String       @default("trial")
+  // Fin de la prueba (TRIAL) o del ciclo pagado vigente (ACTIVO). El motor de
+  // vencimiento automático (src/server/platform/vencimientos.ts) la chequea
+  // en cada login/lectura de plataforma para pasar a VENCIDO sin necesitar un
+  // cron: no hay cobro automático con Mercado Pago todavía, así que esta
+  // fecha es la única señal de "hasta cuándo tiene acceso".
+  vigenciaHasta DateTime?
+  // Cuándo entró a VENCIDO, para calcular el plazo de gracia de 2 días antes
+  // de pasar a SUSPENDIDO. Se limpia al volver a ACTIVO.
+  vencidoDesde  DateTime?
   limites   Json? // { maxUsuarios, maxEquipos, almacenamientoMB, funcionesHabilitadas: [] }
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -61,6 +69,7 @@ model Tenant {
   certificados             Certificado[]
   certificadoUnidades      CertificadoUnidad[]
   notificaciones           Notificacion[]
+  ticketsSoporte           TicketSoporte[]
 
   @@map("tenants")
 }
@@ -90,6 +99,9 @@ model Usuario {
 
   roles    UsuarioRol[]
   sesiones Sesion[]
+
+  ticketsCreados TicketSoporte[] @relation("TicketCreadoPor")
+  mensajesTicket MensajeTicket[]
 
   // El email debe ser único dentro de un tenant. El superadmin SaaS (tenantId null)
   // se rige por el mismo índice tratando null como su propio "espacio".
@@ -1356,4 +1368,59 @@ model Notificacion {
   @@index([tenantId, evento])
   @@index([tenantId, usuarioId])
   @@map("notificaciones")
+}
+
+// ============================================================================
+// Soporte (tickets entre una empresa cliente y la plataforma)
+// ============================================================================
+
+enum EstadoTicketSoporte {
+  ABIERTO
+  EN_PROGRESO
+  RESUELTO
+  CERRADO
+}
+
+enum PrioridadTicketSoporte {
+  BAJA
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+model TicketSoporte {
+  id          String                 @id @default(cuid())
+  tenantId    String
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id])
+  creadoPorId String
+  creadoPor   Usuario                @relation("TicketCreadoPor", fields: [creadoPorId], references: [id])
+  asunto      String
+  estado      EstadoTicketSoporte    @default(ABIERTO)
+  prioridad   PrioridadTicketSoporte @default(NORMAL)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  mensajes MensajeTicket[]
+
+  @@index([tenantId, estado])
+  @@map("tickets_soporte")
+}
+
+// Sin tenantId propio: pertenece al tenant de su ticket (mismo criterio que
+// cualquier tabla "hija"). El superadmin que responde también persiste con
+// tenantId = el del ticket (bypassRls), así el aislamiento por fila sigue
+// funcionando igual que para el resto de las tablas de negocio.
+model MensajeTicket {
+  id           String        @id @default(cuid())
+  tenantId     String
+  ticketId     String
+  ticket       TicketSoporte @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  autorId      String
+  autor        Usuario       @relation(fields: [autorId], references: [id])
+  esSuperAdmin Boolean       @default(false)
+  cuerpo       String
+  createdAt    DateTime      @default(now())
+
+  @@index([tenantId, ticketId])
+  @@map("mensajes_ticket")
 }

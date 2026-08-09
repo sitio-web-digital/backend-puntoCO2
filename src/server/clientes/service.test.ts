@@ -8,6 +8,7 @@ import {
   createCliente,
   updateCliente,
   listClientes,
+  listClientesPaginado,
   getCliente,
   darDeBajaCliente,
   suspenderCliente,
@@ -69,6 +70,26 @@ describe("gestión de clientes (RF-01)", () => {
           nombre: "Ana",
           apellido: "Auditora",
           roles: { create: { rolId: rolAuditor.id } },
+        },
+      });
+      return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
+    });
+  }
+
+  /** Crea un usuario con cualquier rol de plantilla del tenant (para probar alcances distintos de TODAS). */
+  async function crearActorConRol(tenantId: string, nombreRol: string) {
+    const unique = randomUUID().slice(0, 8);
+    const passwordHash = await hashPassword("clave-de-prueba-segura-123");
+    return withTenant({ tenantId }, async (tx) => {
+      const rol = await tx.rol.findFirstOrThrow({ where: { tenantId, nombre: nombreRol } });
+      const usuario = await tx.usuario.create({
+        data: {
+          tenantId,
+          email: `${nombreRol.toLowerCase().replace(/\s+/g, "-")}-${unique}@example.com`,
+          passwordHash,
+          nombre: "Usuario",
+          apellido: nombreRol,
+          roles: { create: { rolId: rol.id } },
         },
       });
       return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
@@ -215,5 +236,61 @@ describe("gestión de clientes (RF-01)", () => {
 
     const listadoB = await listClientes(actorB);
     expect(listadoB).toHaveLength(0);
+  });
+
+  describe("listado paginado", () => {
+    it("devuelve la primera página con el tamaño y el total correctos", async () => {
+      const { adminActor } = await setupTenant();
+      for (let i = 0; i < 5; i++) {
+        await createCliente(adminActor, personaHumanaInput({ nombre: `Cliente${i}` }));
+      }
+
+      const pagina = await listClientesPaginado(adminActor, { page: 1, pageSize: 2 });
+
+      expect(pagina.total).toBe(5);
+      expect(pagina.totalPages).toBe(3);
+      expect(pagina.page).toBe(1);
+      expect(pagina.pageSize).toBe(2);
+      expect(pagina.items).toHaveLength(2);
+    });
+
+    it("la segunda página trae registros distintos de la primera", async () => {
+      const { adminActor } = await setupTenant();
+      for (let i = 0; i < 5; i++) {
+        await createCliente(adminActor, personaHumanaInput({ nombre: `Cliente${i}` }));
+      }
+
+      const pagina1 = await listClientesPaginado(adminActor, { page: 1, pageSize: 2 });
+      const pagina2 = await listClientesPaginado(adminActor, { page: 2, pageSize: 2 });
+
+      const idsPagina1 = new Set(pagina1.items.map((c) => c.id));
+      const idsPagina2 = new Set(pagina2.items.map((c) => c.id));
+      expect([...idsPagina1].some((id) => idsPagina2.has(id))).toBe(false);
+    });
+
+    it("una página fuera de rango devuelve una lista vacía sin romper, manteniendo el total real", async () => {
+      const { adminActor } = await setupTenant();
+      await createCliente(adminActor, personaHumanaInput());
+
+      const pagina = await listClientesPaginado(adminActor, { page: 99, pageSize: 10 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(1);
+    });
+
+    it("un rol con alcance distinto de TODAS no ve nada en el listado paginado (fail closed)", async () => {
+      // "Técnico de campo" tiene CLIENTES:VER con alcance ESTABLECIMIENTO_ASIGNADO,
+      // que el servicio todavía no resuelve — se trata como sin visibilidad (ver
+      // comentario de requireScopeTodasOrDeny en service.ts), a diferencia de
+      // "Auditor" que sí tiene alcance TODAS y por lo tanto vería el listado.
+      const { tenant, adminActor } = await setupTenant();
+      await createCliente(adminActor, personaHumanaInput());
+      const tecnicoActor = await crearActorConRol(tenant.id, "Técnico de campo");
+
+      const pagina = await listClientesPaginado(tecnicoActor, { page: 1 });
+
+      expect(pagina.items).toHaveLength(0);
+      expect(pagina.total).toBe(0);
+    });
   });
 });

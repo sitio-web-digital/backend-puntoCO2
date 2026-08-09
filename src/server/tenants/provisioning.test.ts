@@ -55,13 +55,19 @@ describe("alta de tenant (RF-28)", () => {
     expect(asignacion?.rol.nombre).toBe("Administrador de empresa");
   });
 
-  it("hashea la contraseña del administrador (nunca la guarda en texto plano)", async () => {
+  it("hashea la contraseña del administrador (nunca la guarda en texto plano) y no la devuelve en la respuesta", async () => {
     const input = buildInput();
     const { tenant, usuarioAdmin } = await createTenant(input, { usuarioId: null });
     createdTenantIds.push(tenant.id);
 
-    expect(usuarioAdmin.passwordHash).not.toBe(input.adminPassword);
-    expect(usuarioAdmin.passwordHash.startsWith("$argon2id$")).toBe(true);
+    // El objeto devuelto por createTenant nunca debe incluir el hash (se
+    // sirve tal cual en las respuestas de API) — se verifica el hasheo real
+    // consultando la fila directamente.
+    expect(usuarioAdmin).not.toHaveProperty("passwordHash");
+
+    const conHash = await withTenant({ tenantId: tenant.id }, (tx) => tx.usuario.findUniqueOrThrow({ where: { id: usuarioAdmin.id } }));
+    expect(conHash.passwordHash).not.toBe(input.adminPassword);
+    expect(conHash.passwordHash.startsWith("$argon2id$")).toBe(true);
   });
 
   it("rechaza un slug duplicado sin dejar un tenant a medio crear", async () => {
