@@ -31,7 +31,11 @@ export function NuevaEmpresaForm() {
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.message ?? "No se pudo crear la empresa.");
+        if (Array.isArray(data.details) && data.details.length > 0) {
+          setError(data.details.map((d: { path: (string | number)[]; message: string }) => `${d.path.join(".")}: ${d.message}`).join(" · "));
+        } else {
+          setError(data.message ?? "No se pudo crear la empresa.");
+        }
         return;
       }
       setCreada({ slug: data.tenant.slug, adminEmail: data.usuarioAdmin.email });
@@ -85,7 +89,16 @@ export function NuevaEmpresaForm() {
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label htmlFor="slug">Identificador (slug)</label>
-              <input id="slug" name="slug" className="mono" placeholder="matafuegos-del-sur" required />
+              <input
+                id="slug"
+                name="slug"
+                className="mono"
+                placeholder="matafuegos-del-sur"
+                pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                minLength={3}
+                title="Sólo minúsculas, números y guiones, sin espacios (ej: acme-matafuegos)"
+                required
+              />
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label htmlFor="cuit">CUIT (opcional)</label>
@@ -111,7 +124,7 @@ export function NuevaEmpresaForm() {
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
                 <label htmlFor="adminPassword">Contraseña inicial</label>
-                <input id="adminPassword" name="adminPassword" placeholder="Mínimo 12 caracteres" required />
+                <input id="adminPassword" name="adminPassword" placeholder="Mínimo 12 caracteres" minLength={12} required />
               </div>
             </div>
 
