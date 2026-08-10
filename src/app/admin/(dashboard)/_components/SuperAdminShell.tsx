@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: "/admin", label: "Resumen", exact: true },
   { href: "/admin/empresas", label: "Empresas" },
   { href: "/admin/soporte", label: "Soporte" },
+  { href: "/admin/lista-espera", label: "Lista de espera" },
 ];
 
 export function SuperAdminShell({ nombre, apellido, children }: { nombre: string; apellido: string; children: ReactNode }) {

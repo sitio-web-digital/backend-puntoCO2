@@ -1300,6 +1300,12 @@ details.accordion-card {
 
 .waitlist-form {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.waitlist-fields {
+  display: flex;
   flex-direction: row;
   gap: 10px;
 }
@@ -1317,6 +1323,7 @@ details.accordion-card {
 }
 
 .waitlist-form .btn-primary {
+  align-self: flex-start;
   height: 46px;
   padding: 0 20px;
   font-size: 15px;
@@ -1342,8 +1349,12 @@ details.accordion-card {
 }
 
 @media (max-width: 720px) {
-  .waitlist-form {
+  .waitlist-fields {
     flex-direction: column;
+  }
+
+  .waitlist-form .btn-primary {
+    align-self: stretch;
   }
 }
 

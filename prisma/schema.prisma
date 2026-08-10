@@ -32,6 +32,7 @@ enum EstadoTenant {
 model WaitlistLead {
   id        String   @id @default(cuid())
   email     String   @unique
+  telefono  String
   createdAt DateTime @default(now())
 
   @@map("waitlist_leads")
