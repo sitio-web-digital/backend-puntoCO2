@@ -26,6 +26,17 @@ enum EstadoTenant {
   CANCELADO
 }
 
+// Lista de espera de la landing pública (/home): captura de interesados
+// antes del lanzamiento comercial. No tiene tenantId (es previo a que la
+// empresa exista como tenant) ni relación con el resto del modelo.
+model WaitlistLead {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("waitlist_leads")
+}
+
 model Tenant {
   id        String       @id @default(cuid())
   nombre    String
