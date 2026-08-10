@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const NAV_GROUPS = [
   { label: "Operación", items: ["Clientes", "Matafuegos", "No conformidades", "Mantenimientos"] },
@@ -181,15 +181,33 @@ function contenidoDeTab(id: string) {
 
 export function MockupCarousel() {
   const [active, setActive] = useState(0);
+  const pausedRef = useRef(false);
   const tab = TABS[active]!;
 
   function ir(delta: number) {
     setActive((prev) => (prev + delta + TABS.length) % TABS.length);
   }
 
+  // Avanza solo cada 4.5s (igual que el diseño original), pausado mientras
+  // el mouse está sobre el mockup para no interrumpir al que lo está mirando.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (pausedRef.current) return;
+      setActive((prev) => (prev + 1) % TABS.length);
+    }, 4500);
+    return () => clearInterval(id);
+  }, []);
+
+  function pausar() {
+    pausedRef.current = true;
+  }
+  function reanudar() {
+    pausedRef.current = false;
+  }
+
   return (
     <div className="mockup-shell">
-      <div className="mockup-window">
+      <div className="mockup-window" onMouseEnter={pausar} onMouseLeave={reanudar}>
         <div className="mockup-sidebar">
           <div className="mockup-brand">
             <span className="mockup-brand-mark" />
@@ -213,7 +231,7 @@ export function MockupCarousel() {
         </div>
         <div className="mockup-content">
           <div className="mockup-content-header">{tab.headerTitle}</div>
-          <div className="mockup-content-body">
+          <div className="mockup-content-body" key={tab.id}>
             <h3 className="mock-title">{tab.headerTitle}</h3>
             {contenidoDeTab(tab.id)}
           </div>

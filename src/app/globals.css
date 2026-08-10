@@ -27,6 +27,8 @@
   --neu: #6b7280;
   --neu-bg: rgba(107, 114, 128, 0.12);
   --neu-bd: rgba(107, 114, 128, 0.24);
+  --gridline: rgba(22, 22, 26, 0.045);
+  --glow2: rgba(29, 78, 216, 0.06);
   --sb-bg: #131316;
   --sb-bd: #26262c;
   --sb-text: #a0a0a9;
@@ -82,6 +84,8 @@
     --neu: #9aa0ab;
     --neu-bg: rgba(154, 160, 171, 0.13);
     --neu-bd: rgba(154, 160, 171, 0.22);
+    --gridline: rgba(255, 255, 255, 0.05);
+    --glow2: rgba(96, 165, 250, 0.08);
     --sb-bg: #08080a;
     --sb-bd: #1e1e23;
   }
@@ -115,6 +119,8 @@
   --neu: #9aa0ab;
   --neu-bg: rgba(154, 160, 171, 0.13);
   --neu-bd: rgba(154, 160, 171, 0.22);
+  --gridline: rgba(255, 255, 255, 0.05);
+  --glow2: rgba(96, 165, 250, 0.08);
   --sb-bg: #08080a;
   --sb-bd: #1e1e23;
 }
@@ -1194,8 +1200,8 @@ details.accordion-card {
   width: 22px;
   height: 22px;
   border-radius: 999px;
-  border: 3px solid var(--acc);
   flex-shrink: 0;
+  background: radial-gradient(circle, var(--acc) 0 30%, transparent 30% 40%, var(--acc) 40% 100%);
 }
 
 .pc-brand-name {
@@ -1245,7 +1251,21 @@ details.accordion-card {
 .pc-hero {
   position: relative;
   overflow: hidden;
-  background-image: radial-gradient(900px 420px at 12% -12%, var(--acc-soft), transparent 68%);
+  background-image:
+    radial-gradient(900px 420px at 12% -12%, var(--acc-soft), transparent 68%),
+    radial-gradient(760px 380px at 92% 4%, var(--glow2), transparent 70%),
+    linear-gradient(var(--gridline) 1px, transparent 1px),
+    linear-gradient(90deg, var(--gridline) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    64px 64px,
+    64px 64px;
+  background-position:
+    0 0,
+    0 0,
+    -1px -1px,
+    -1px -1px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1368,8 +1388,8 @@ details.accordion-card {
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  border: 3px solid var(--acc);
   flex-shrink: 0;
+  background: radial-gradient(circle, var(--acc) 0 30%, transparent 30% 40%, var(--acc) 40% 100%);
 }
 
 .mockup-brand-text {
@@ -1455,6 +1475,18 @@ details.accordion-card {
   flex-direction: column;
   gap: 12px;
   overflow: auto;
+  animation: mockup-shot-in 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes mockup-shot-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .mock-title {
