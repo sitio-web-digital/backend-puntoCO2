@@ -268,7 +268,10 @@ textarea:focus {
   outline-offset: 1px;
 }
 
-button {
+button,
+.btn-primary,
+.btn-secondary,
+.btn-danger {
   cursor: pointer;
   font-size: 14px;
   border-radius: 8px;
@@ -276,6 +279,14 @@ button {
   height: 34px;
   padding: 0 14px;
   font-weight: 500;
+  /* .btn-* también se usa en <Link>/<a>: sin esto, un botón-link queda sin
+     forma (altura/padding vienen de acá) y con el subrayado por defecto del
+     link, en vez de verse como el resto de los botones. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  width: fit-content;
 }
 
 .btn-primary {
@@ -1160,5 +1171,111 @@ details.accordion-card {
   .qr-label {
     border: 1px solid #000;
     break-inside: avoid;
+  }
+}
+
+/* ---------- Landing pública (/home) ---------- */
+
+.landing-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.landing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.landing-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 18px;
+  padding: 64px 24px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.landing-eyebrow {
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.landing-hero h1 {
+  font-size: 38px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.landing-hero p {
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin: 0;
+  max-width: 480px;
+}
+
+.landing-cta {
+  margin-top: 6px;
+}
+
+.landing-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 32px 56px;
+}
+
+.landing-feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.landing-feature-card h2 {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.landing-feature-card p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.landing-footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 22px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 720px) {
+  .landing-features {
+    grid-template-columns: 1fr;
+  }
+  .landing-hero h1 {
+    font-size: 28px;
   }
 }

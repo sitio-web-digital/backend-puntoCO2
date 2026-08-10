@@ -33,7 +33,7 @@ export default async function UsuariosPage({ searchParams }: { searchParams: Pro
             La administración de usuarios es sólo para roles con permiso sobre Usuarios y roles. Si creés que deberías tenerlo, pedile a un
             administrador de tu empresa que revise tus roles.
           </p>
-          <Link href="/clientes" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", width: "fit-content" }}>
+          <Link href="/clientes" className="btn-primary">
             Volver al inicio
           </Link>
         </div>

@@ -75,7 +75,7 @@ export function ImportarMatafuegosButton({ establecimientoId, establecimientoNom
             </p>
             {/* Descarga de archivo (Content-Disposition: attachment), no navegación entre páginas: <a> nativo es lo correcto acá. */}
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-            <a href="/api/matafuegos/importar/plantilla" className="btn-secondary btn-sm" style={{ width: "fit-content" }}>
+            <a href="/api/matafuegos/importar/plantilla" className="btn-secondary btn-sm">
               Descargar plantilla .xlsx
             </a>
           </div>

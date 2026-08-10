@@ -30,7 +30,7 @@ export default function ProtectedError({ error, reset }: { error: Error & { dige
             Reintentar
           </button>
         )}
-        <Link href="/clientes" className="btn-primary" style={{ display: "inline-flex", alignItems: "center" }}>
+        <Link href="/clientes" className="btn-primary">
           Volver al inicio
         </Link>
       </div>
