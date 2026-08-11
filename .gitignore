@@ -31,4 +31,4 @@ test-results/
 # desarrollo), no es código de la app
 design-handoff/
 Matafuego SaaS (standalone)*.html
-*(standalone).html
+*(standalone)*.html

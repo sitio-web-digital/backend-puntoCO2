@@ -1372,6 +1372,11 @@ details.accordion-card {
   overflow: hidden;
 }
 
+.mockup-stack {
+  position: relative;
+  transform-origin: top left;
+}
+
 .mockup-window {
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1382,7 +1387,6 @@ details.accordion-card {
     0 20px 44px rgba(0, 0, 0, 0.07);
   display: flex;
   min-height: 420px;
-  transform-origin: top left;
 }
 
 .mockup-sidebar {
@@ -1504,6 +1508,417 @@ details.accordion-card {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Celular flotando sobre la esquina inferior derecha del dashboard */
+
+.mockup-phone {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 3;
+  width: 200px;
+  height: 390px;
+  padding: 9px;
+  border-radius: 30px;
+  background: #131316;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 26px 54px rgba(0, 0, 0, 0.3);
+}
+
+.mockup-phone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.mockup-phone-notch {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  margin-left: -20px;
+  width: 40px;
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.28);
+  z-index: 4;
+}
+
+.mockup-phone-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px 8px;
+  background: #131316;
+  border-bottom: 1px solid #26262c;
+}
+
+.mockup-phone-mark {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--acc) 0 30%, transparent 30% 40%, var(--acc) 40% 100%);
+}
+
+.mockup-phone-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.mockup-phone-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  min-height: 0;
+  overflow: auto;
+  animation: mockup-shot-in 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mockup-phone-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.mockup-phone-nav-item {
+  font-family: var(--font-mono), monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.mockup-phone-nav-item.active {
+  color: var(--acc);
+}
+
+.mockup-phone-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.mockup-phone-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mockup-phone-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mockup-phone-desc {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.mockup-phone-mono {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.mockup-phone-mono.strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mockup-phone-mono.big {
+  font-size: 13px;
+}
+
+.mockup-phone-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.mockup-phone-label.warn {
+  color: var(--warn);
+}
+
+.mockup-phone-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-family: var(--font-mono), monospace;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mockup-phone-pill-ok {
+  background: rgba(21, 128, 61, 0.1);
+  color: var(--ok);
+  border: 1px solid rgba(21, 128, 61, 0.26);
+}
+
+.mockup-phone-pill-warn {
+  background: rgba(161, 98, 7, 0.11);
+  color: var(--warn);
+  border: 1px solid rgba(161, 98, 7, 0.26);
+}
+
+.mockup-phone-pill-bad {
+  background: rgba(185, 28, 28, 0.1);
+  color: var(--bad);
+  border: 1px solid rgba(185, 28, 28, 0.26);
+}
+
+.mockup-phone-pill-neutral {
+  background: var(--field);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+}
+
+.mockup-phone-pill-info {
+  background: rgba(29, 78, 216, 0.09);
+  color: var(--info);
+  border: 1px solid rgba(29, 78, 216, 0.22);
+}
+
+/* Pantalla "Escanear QR" */
+
+.mockup-phone-scan-box {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 11px;
+  background: #0b0b0d;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mockup-phone-scan-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.mockup-phone-scan-frame {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.mockup-phone-scan-corner {
+  position: absolute;
+  width: 23px;
+  height: 23px;
+  border: 0 solid var(--acc);
+}
+
+.mockup-phone-scan-corner.tl {
+  top: 0;
+  left: 0;
+  border-top-width: 2.5px;
+  border-left-width: 2.5px;
+  border-radius: 9px 0 0 0;
+}
+
+.mockup-phone-scan-corner.tr {
+  top: 0;
+  right: 0;
+  border-top-width: 2.5px;
+  border-right-width: 2.5px;
+  border-radius: 0 9px 0 0;
+}
+
+.mockup-phone-scan-corner.bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 2.5px;
+  border-left-width: 2.5px;
+  border-radius: 0 0 0 9px;
+}
+
+.mockup-phone-scan-corner.br {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 2.5px;
+  border-right-width: 2.5px;
+  border-radius: 0 0 9px 0;
+}
+
+.mockup-phone-scan-line {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 8px;
+  height: 2px;
+  background: var(--acc);
+  box-shadow: 0 0 10px var(--acc);
+  animation: mockup-phone-scan 2.1s ease-in-out infinite;
+}
+
+@keyframes mockup-phone-scan {
+  0% {
+    top: 8px;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    top: calc(100% - 10px);
+    opacity: 0;
+  }
+}
+
+.mockup-phone-scan-caption {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--font-mono), monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #8a8a93;
+}
+
+/* Pantalla de detalle de unidad (certificados) */
+
+.mockup-phone-detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mockup-phone-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+}
+
+.mockup-phone-detail-label {
+  color: var(--text-2);
+}
+
+.mockup-phone-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mockup-phone-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border-radius: 9px;
+  font-size: 11.5px;
+}
+
+.mockup-phone-btn.primary {
+  background: var(--acc);
+  color: #fff;
+  font-weight: 600;
+}
+
+.mockup-phone-btn.secondary {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-weight: 500;
+}
+
+/* Pantalla de checklist (inspección en campo) */
+
+.mockup-phone-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mockup-phone-check {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: #fff;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.mockup-phone-check.checked {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.mockup-phone-check-label {
+  font-size: 10.5px;
+  color: var(--text);
+}
+
+.mockup-phone-check-label.muted {
+  color: var(--text-2);
+}
+
+.mockup-phone-noconformidad {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid rgba(161, 98, 7, 0.26);
+  border-radius: 9px;
+  background: rgba(161, 98, 7, 0.08);
+}
+
+.mockup-phone-noconformidad-text {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-2);
 }
 
 .mock-title {

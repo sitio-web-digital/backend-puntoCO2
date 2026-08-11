@@ -1,21 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { PhoneMockup } from "./PhoneMockup";
+import { CLIENTES_ROWS, MATAFUEGOS_ROWS, REPORTES_ROWS, NOTIFICACIONES_ROWS, estadoDe } from "./mock-data";
 
 const NAV_GROUPS = [
   { label: "Operación", items: ["Clientes", "Matafuegos", "No conformidades", "Mantenimientos"] },
   { label: "Trabajo", items: ["Órdenes de trabajo", "Retiros y entregas"] },
   { label: "Documentación", items: ["Certificados", "Notificaciones", "Reportes"] },
 ];
-
-type Estado = "ok" | "warn" | "bad" | "neutral";
-
-function estadoDe(valor: string): Estado {
-  if (["Activo", "Apto", "Emitido", "Enviada", "Entregada", "Leída"].includes(valor)) return "ok";
-  if (["Suspendido", "Observado", "En taller", "Pendiente", "Reintento"].includes(valor)) return "warn";
-  if (["Vencido"].includes(valor)) return "bad";
-  return "neutral";
-}
 
 function Badge({ children }: { children: string }) {
   return <span className={`mock-badge mock-badge-${estadoDe(children)}`}>{children}</span>;
@@ -34,38 +27,6 @@ const TABS: MockTab[] = [
   { id: "certificados", tabLabel: "Certificados", sidebarActive: "Certificados", headerTitle: "Certificado #54" },
   { id: "reportes", tabLabel: "Reportes", sidebarActive: "Reportes", headerTitle: "Reportes e indicadores" },
   { id: "notificaciones", tabLabel: "Notificaciones", sidebarActive: "Notificaciones", headerTitle: "Notificaciones" },
-];
-
-const CLIENTES_ROWS = [
-  ["Supermercado La Espiga SRL", "30-71234567-8", "Activo", "Responsable inscripto", "3", "64"],
-  ["Metalúrgica San Martín SA", "30-70123456-1", "Activo", "Responsable inscripto", "2", "41"],
-  ["Farmacia Central — Roberto Díaz", "27-24567891-3", "Activo", "Monotributista", "1", "6"],
-  ["Colegio San José", "30-65432198-7", "Suspendido", "Exento", "1", "18"],
-  ["Distribuidora Los Álamos SRL", "30-69988776-4", "Dado de baja", "Responsable inscripto", "2", "27"],
-];
-
-const MATAFUEGOS_ROWS = [
-  ["MAT-0231", "AR-88342", "Apto", "Portátil", "Polvo químico ABC", "Ver ficha ↗"],
-  ["MAT-0198", "AR-77129", "Observado", "Portátil", "CO₂", "Ver ficha ↗"],
-  ["MAT-0056", "AR-55012", "Vencido", "Rodante", "Polvo químico ABC", "Ver ficha ↗"],
-  ["MAT-0312", "AR-91004", "En taller", "Portátil", "Agua", "Ver ficha ↗"],
-  ["MAT-0044", "AR-40221", "Pendiente", "Vehicular", "CO₂", "Ver ficha ↗"],
-];
-
-const REPORTES_ROWS = [
-  ["MAT-0198", "AR-77129", "Observado", "15/09/2026", "—", "La Espiga SRL"],
-  ["MAT-0312", "AR-91004", "En taller", "—", "10/08/2026", "San Martín SA"],
-  ["MAT-0044", "AR-40221", "Pendiente", "02/08/2026", "—", "Colegio San José"],
-  ["MAT-0087", "AR-33018", "Apto", "05/08/2026", "—", "Farmacia Central"],
-  ["MAT-0119", "AR-60271", "Apto", "—", "12/08/2026", "Los Álamos SRL"],
-];
-
-const NOTIFICACIONES_ROWS = [
-  ["Certificado emitido", "EMAIL", "Enviada", "compras@laespiga.com.ar", "20/07/2026 16:02"],
-  ["Vencimiento próximo", "WHATSAPP", "Entregada", "+54 9 11 5555-1234", "19/07/2026 09:30"],
-  ["Unidad retirada", "WHATSAPP", "Entregada", "+54 9 11 4444-7890", "28/07/2026 10:16"],
-  ["Mantenimiento atrasado", "EMAIL", "Reintento", "administracion@sanmartinsa.com.ar", "25/07/2026 08:00"],
-  ["Orden programada", "EMAIL", "Leída", "compras@laespiga.com.ar", "20/07/2026 09:10"],
 ];
 
 function MockTable({ columns, rows, statusCol }: { columns: string[]; rows: string[][]; statusCol?: number }) {
@@ -243,39 +204,40 @@ export function MockupCarousel() {
       <div ref={outerRef} className="mockup-scale-outer" style={{ height: scale ? innerHeight * scale : undefined }}>
         <div
           ref={innerRef}
-          className="mockup-window"
+          className="mockup-stack"
           style={{ width: NATURAL_WIDTH, transform: scale ? `scale(${scale})` : undefined, visibility: scale ? "visible" : "hidden" }}
-          onMouseEnter={pausar}
-          onMouseLeave={reanudar}
         >
-          <div className="mockup-sidebar">
-            <div className="mockup-brand">
-              <span className="mockup-brand-mark" />
-              <span className="mockup-brand-text">
-                <span className="mockup-brand-name">PuntoCo2</span>
-                <span className="mockup-brand-slug">matafuegos-del-sur</span>
-              </span>
+          <div className="mockup-window" onMouseEnter={pausar} onMouseLeave={reanudar}>
+            <div className="mockup-sidebar">
+              <div className="mockup-brand">
+                <span className="mockup-brand-mark" />
+                <span className="mockup-brand-text">
+                  <span className="mockup-brand-name">PuntoCo2</span>
+                  <span className="mockup-brand-slug">matafuegos-del-sur</span>
+                </span>
+              </div>
+              <nav>
+                {NAV_GROUPS.map((group) => (
+                  <div key={group.label} className="mockup-nav-group">
+                    <div className="mockup-nav-label">{group.label}</div>
+                    {group.items.map((item) => (
+                      <div key={item} className={`mockup-nav-item${item === tab.sidebarActive ? " active" : ""}`}>
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </nav>
             </div>
-            <nav>
-              {NAV_GROUPS.map((group) => (
-                <div key={group.label} className="mockup-nav-group">
-                  <div className="mockup-nav-label">{group.label}</div>
-                  {group.items.map((item) => (
-                    <div key={item} className={`mockup-nav-item${item === tab.sidebarActive ? " active" : ""}`}>
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </nav>
-          </div>
-          <div className="mockup-content">
-            <div className="mockup-content-header">{tab.headerTitle}</div>
-            <div className="mockup-content-body" key={tab.id}>
-              <h3 className="mock-title">{tab.headerTitle}</h3>
-              {contenidoDeTab(tab.id)}
+            <div className="mockup-content">
+              <div className="mockup-content-header">{tab.headerTitle}</div>
+              <div className="mockup-content-body" key={tab.id}>
+                <h3 className="mock-title">{tab.headerTitle}</h3>
+                {contenidoDeTab(tab.id)}
+              </div>
             </div>
           </div>
+          <PhoneMockup activeTab={tab.id} />
         </div>
       </div>
 
