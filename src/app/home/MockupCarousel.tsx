@@ -179,10 +179,43 @@ function contenidoDeTab(id: string) {
   }
 }
 
+// Ancho "natural" del mockup del dashboard: siempre se renderiza con este
+// layout fijo (sidebar + tablas completas, sin reflow) y se escala como una
+// imagen para caber en pantallas chicas, en vez de reacomodar sus columnas.
+const NATURAL_WIDTH = 760;
+
+function useEscalaResponsiva() {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState<number | null>(null);
+  const [innerHeight, setInnerHeight] = useState(0);
+
+  useEffect(() => {
+    const outer = outerRef.current;
+    const inner = innerRef.current;
+    if (!outer || !inner) return;
+
+    function recalcular() {
+      if (!outer || !inner) return;
+      setScale(outer.clientWidth / NATURAL_WIDTH);
+      setInnerHeight(inner.offsetHeight);
+    }
+
+    recalcular();
+    const observer = new ResizeObserver(recalcular);
+    observer.observe(outer);
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
+
+  return { outerRef, innerRef, scale, innerHeight };
+}
+
 export function MockupCarousel() {
   const [active, setActive] = useState(0);
   const pausedRef = useRef(false);
   const tab = TABS[active]!;
+  const { outerRef, innerRef, scale, innerHeight } = useEscalaResponsiva();
 
   function ir(delta: number) {
     setActive((prev) => (prev + delta + TABS.length) % TABS.length);
@@ -207,33 +240,41 @@ export function MockupCarousel() {
 
   return (
     <div className="mockup-shell">
-      <div className="mockup-window" onMouseEnter={pausar} onMouseLeave={reanudar}>
-        <div className="mockup-sidebar">
-          <div className="mockup-brand">
-            <span className="mockup-brand-mark" />
-            <span className="mockup-brand-text">
-              <span className="mockup-brand-name">PuntoCo2</span>
-              <span className="mockup-brand-slug">matafuegos-del-sur</span>
-            </span>
+      <div ref={outerRef} className="mockup-scale-outer" style={{ height: scale ? innerHeight * scale : undefined }}>
+        <div
+          ref={innerRef}
+          className="mockup-window"
+          style={{ width: NATURAL_WIDTH, transform: scale ? `scale(${scale})` : undefined, visibility: scale ? "visible" : "hidden" }}
+          onMouseEnter={pausar}
+          onMouseLeave={reanudar}
+        >
+          <div className="mockup-sidebar">
+            <div className="mockup-brand">
+              <span className="mockup-brand-mark" />
+              <span className="mockup-brand-text">
+                <span className="mockup-brand-name">PuntoCo2</span>
+                <span className="mockup-brand-slug">matafuegos-del-sur</span>
+              </span>
+            </div>
+            <nav>
+              {NAV_GROUPS.map((group) => (
+                <div key={group.label} className="mockup-nav-group">
+                  <div className="mockup-nav-label">{group.label}</div>
+                  {group.items.map((item) => (
+                    <div key={item} className={`mockup-nav-item${item === tab.sidebarActive ? " active" : ""}`}>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </nav>
           </div>
-          <nav>
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="mockup-nav-group">
-                <div className="mockup-nav-label">{group.label}</div>
-                {group.items.map((item) => (
-                  <div key={item} className={`mockup-nav-item${item === tab.sidebarActive ? " active" : ""}`}>
-                    {item}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </nav>
-        </div>
-        <div className="mockup-content">
-          <div className="mockup-content-header">{tab.headerTitle}</div>
-          <div className="mockup-content-body" key={tab.id}>
-            <h3 className="mock-title">{tab.headerTitle}</h3>
-            {contenidoDeTab(tab.id)}
+          <div className="mockup-content">
+            <div className="mockup-content-header">{tab.headerTitle}</div>
+            <div className="mockup-content-body" key={tab.id}>
+              <h3 className="mock-title">{tab.headerTitle}</h3>
+              {contenidoDeTab(tab.id)}
+            </div>
           </div>
         </div>
       </div>

@@ -1367,6 +1367,11 @@ details.accordion-card {
   gap: 14px;
 }
 
+.mockup-scale-outer {
+  width: 100%;
+  overflow: hidden;
+}
+
 .mockup-window {
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1377,6 +1382,7 @@ details.accordion-card {
     0 20px 44px rgba(0, 0, 0, 0.07);
   display: flex;
   min-height: 420px;
+  transform-origin: top left;
 }
 
 .mockup-sidebar {
@@ -1701,15 +1707,6 @@ details.accordion-card {
   cursor: pointer;
 }
 
-@media (max-width: 780px) {
-  .mockup-window {
-    flex-direction: column;
-    min-height: 0;
-  }
-  .mockup-sidebar {
-    display: none;
-  }
-}
 
 /* Secciones de contenido */
 
