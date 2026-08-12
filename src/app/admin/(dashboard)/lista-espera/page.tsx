@@ -39,7 +39,7 @@ export default async function ListaEsperaPage({ searchParams }: { searchParams: 
                   {leads.map((lead) => (
                     <tr key={lead.id}>
                       <td style={{ fontWeight: 500 }}>{lead.email}</td>
-                      <td className="mono">{lead.telefono}</td>
+                      <td className="mono">{lead.telefono || "—"}</td>
                       <td className="mono">{formatFechaHora(lead.createdAt)}</td>
                     </tr>
                   ))}

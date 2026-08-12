@@ -54,9 +54,13 @@ describe("lista de espera de la landing", () => {
     await expect(anotarseWaitlist({ email: "no-es-un-email", telefono: TELEFONO })).rejects.toThrow();
   });
 
-  it("rechaza un teléfono vacío", async () => {
+  it("acepta un teléfono vacío: es opcional, sólo el email es obligatorio", async () => {
     const email = `lead-${randomUUID().slice(0, 8)}@example.com`;
-    await expect(anotarseWaitlist({ email, telefono: "" })).rejects.toThrow();
+    createdEmails.push(email);
+    await expect(anotarseWaitlist({ email, telefono: "" })).resolves.not.toThrow();
+
+    const lead = await prisma.waitlistLead.findUnique({ where: { email } });
+    expect(lead?.telefono).toBe("");
   });
 
   it("rechaza un teléfono con letras", async () => {

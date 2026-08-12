@@ -5,9 +5,8 @@ export const anotarseWaitlistSchema = z.object({
   telefono: z
     .string()
     .trim()
-    .min(6, "Ingresá un teléfono válido")
     .max(30)
-    .regex(/^[0-9+\s()-]+$/, "El teléfono sólo admite números, espacios y + ( ) -"),
+    .regex(/^[0-9+\s()-]*$/, "El teléfono sólo admite números, espacios y + ( ) -"),
 });
 
 export type AnotarseWaitlistInput = z.input<typeof anotarseWaitlistSchema>;
