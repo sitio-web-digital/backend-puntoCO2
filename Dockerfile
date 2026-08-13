@@ -39,6 +39,10 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
+# src/app/home/route.ts lee landing.html del disco en tiempo de ejecución
+# (no queda inlineado en .next), así que necesita el árbol de fuentes real
+# presente en el runner, no sólo el build compilado.
+COPY --from=builder /app/src ./src
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
