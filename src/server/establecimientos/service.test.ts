@@ -62,19 +62,28 @@ describe("gestión de establecimientos (RF-02)", () => {
     return { tenant, adminActor, cliente };
   }
 
-  async function crearActorAuditor(tenantId: string) {
+  /** Rol ad-hoc de sólo lectura (VER:TODAS sobre ESTABLECIMIENTOS, sin
+   * ningún permiso de escritura) — el catálogo por defecto ya no trae un
+   * rol "Auditor". */
+  async function crearActorSoloLectura(tenantId: string) {
     const unique = randomUUID().slice(0, 8);
     const passwordHash = await hashPassword("clave-de-prueba-segura-123");
     return withTenant({ tenantId }, async (tx) => {
-      const rolAuditor = await tx.rol.findFirstOrThrow({ where: { tenantId, nombre: "Auditor" } });
+      const rol = await tx.rol.create({
+        data: {
+          tenantId,
+          nombre: `Solo lectura ${unique}`,
+          permisos: { create: { recurso: "ESTABLECIMIENTOS", accion: "VER", alcance: "TODAS" } },
+        },
+      });
       const usuario = await tx.usuario.create({
         data: {
           tenantId,
-          email: `auditor-${unique}@example.com`,
+          email: `lectura-${unique}@example.com`,
           passwordHash,
-          nombre: "Ana",
-          apellido: "Auditora",
-          roles: { create: { rolId: rolAuditor.id } },
+          nombre: "Lu",
+          apellido: "Lectora",
+          roles: { create: { rolId: rol.id } },
         },
       });
       return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
@@ -146,9 +155,9 @@ describe("gestión de establecimientos (RF-02)", () => {
 
   it("un usuario sin permiso de creación no puede registrar un establecimiento", async () => {
     const { tenant, cliente } = await setupTenantConCliente();
-    const auditorActor = await crearActorAuditor(tenant.id);
+    const soloLecturaActor = await crearActorSoloLectura(tenant.id);
 
-    await expect(createEstablecimiento(auditorActor, { clienteId: cliente.id, nombre: "Sede no autorizada" })).rejects.toThrow(ForbiddenError);
+    await expect(createEstablecimiento(soloLecturaActor, { clienteId: cliente.id, nombre: "Sede no autorizada" })).rejects.toThrow(ForbiddenError);
   });
 
   it("lanza EstablecimientoNotFoundError al operar sobre un id inexistente", async () => {

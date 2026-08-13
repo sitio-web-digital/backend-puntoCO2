@@ -55,9 +55,7 @@ describe("órdenes de trabajo (RF-11)", () => {
         await tx.ordenTrabajoItem.deleteMany({ where: { tenantId } });
         await tx.ordenTrabajoUnidad.deleteMany({ where: { tenantId } });
         await tx.ordenTrabajo.deleteMany({ where: { tenantId } });
-        await tx.precioServicio.deleteMany({ where: { tenantId } });
         await tx.servicio.deleteMany({ where: { tenantId } });
-        await tx.listaPrecio.deleteMany({ where: { tenantId } });
         await tx.mantenimientoProgramado.deleteMany({ where: { tenantId } });
         await tx.noConformidad.deleteMany({ where: { tenantId } });
         await tx.inspeccion.deleteMany({ where: { tenantId } });
@@ -136,6 +134,34 @@ describe("órdenes de trabajo (RF-11)", () => {
     });
   }
 
+  /** Rol ad-hoc de sólo lectura (VER:TODAS sobre ORDENES_TRABAJO, sin
+   * ningún permiso de escritura) — el catálogo por defecto ya no trae un
+   * rol "Comercial" con esta combinación exacta de permisos. */
+  async function crearActorSoloLectura(tenantId: string) {
+    const unique = randomUUID().slice(0, 8);
+    const passwordHash = await hashPassword("clave-de-prueba-segura-123");
+    return withTenant({ tenantId }, async (tx) => {
+      const rol = await tx.rol.create({
+        data: {
+          tenantId,
+          nombre: `Solo lectura ${unique}`,
+          permisos: { create: { recurso: "ORDENES_TRABAJO", accion: "VER", alcance: "TODAS" } },
+        },
+      });
+      const usuario = await tx.usuario.create({
+        data: {
+          tenantId,
+          email: `lectura-${unique}@example.com`,
+          passwordHash,
+          nombre: "Lu",
+          apellido: "Lectora",
+          roles: { create: { rolId: rol.id } },
+        },
+      });
+      return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
+    });
+  }
+
   describe("alta y numeración", () => {
     it("crea una orden en BORRADOR con numeración correlativa por tenant", async () => {
       const { adminActor, cliente } = await setupBase();
@@ -161,7 +187,7 @@ describe("órdenes de trabajo (RF-11)", () => {
 
     it("un rol sin CREAR (técnico de campo) no puede crear órdenes", async () => {
       const { tenant, cliente } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       await expect(crearOrdenTrabajo(tecnico, { clienteId: cliente.id })).rejects.toThrow(ForbiddenError);
     });
   });
@@ -197,7 +223,7 @@ describe("órdenes de trabajo (RF-11)", () => {
 
     it("crea una orden desde un mantenimiento programado, heredando el técnico asignado", async () => {
       const { tenant, adminActor, matafuego } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const mantenimiento = await crearMantenimientoProgramado(adminActor, {
         matafuegoId: matafuego.id,
         tipoServicio: "RECARGA",
@@ -268,7 +294,7 @@ describe("órdenes de trabajo (RF-11)", () => {
   describe("ciclo de vida completo", () => {
     it("recorre BORRADOR -> PENDIENTE_DE_APROBACION -> PROGRAMADA -> ASIGNADA -> EN_PROCESO -> FINALIZADA -> ENTREGADA -> FACTURADA", async () => {
       const { tenant, adminActor, cliente, servicio } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
       await agregarItemOrden(adminActor, orden.id, { servicioId: servicio.id });
@@ -301,7 +327,7 @@ describe("órdenes de trabajo (RF-11)", () => {
 
     it("admite pausar y reanudar durante EN_PROCESO", async () => {
       const { tenant, adminActor, cliente, servicio } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id, tecnicoAsignadoId: tecnico.usuarioId });
       await agregarItemOrden(adminActor, orden.id, { servicioId: servicio.id });
       await aprobarOrden(adminActor, orden.id);
@@ -317,7 +343,7 @@ describe("órdenes de trabajo (RF-11)", () => {
 
     it("marcarEnCamino es una transición válida desde ASIGNADA hacia EN_CAMINO", async () => {
       const { tenant, adminActor, cliente } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
       await aprobarOrden(adminActor, orden.id);
       await asignarTecnico(adminActor, orden.id, { tecnicoAsignadoId: tecnico.usuarioId });
@@ -356,8 +382,8 @@ describe("órdenes de trabajo (RF-11)", () => {
 
     it("un técnico ajeno (no asignado) no puede iniciar el trabajo de una orden que no es suya", async () => {
       const { tenant, adminActor, cliente } = await setupBase();
-      const tecnicoAsignado = await crearActorConRol(tenant.id, "Técnico de campo");
-      const tecnicoAjeno = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnicoAsignado = await crearActorConRol(tenant.id, "Técnico");
+      const tecnicoAjeno = await crearActorConRol(tenant.id, "Técnico");
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
       await aprobarOrden(adminActor, orden.id);
       await asignarTecnico(adminActor, orden.id, { tecnicoAsignadoId: tecnicoAsignado.usuarioId });
@@ -367,7 +393,7 @@ describe("órdenes de trabajo (RF-11)", () => {
 
     it("un técnico no puede asignarse órdenes ni aprobarlas ni facturarlas (acciones reservadas a alcance TODAS)", async () => {
       const { tenant, adminActor, cliente } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
 
       await expect(aprobarOrden(tecnico, orden.id)).rejects.toThrow(ForbiddenError);
@@ -378,7 +404,7 @@ describe("órdenes de trabajo (RF-11)", () => {
   describe("registrar avance y edición administrativa", () => {
     it("el técnico asignado puede registrar avance (horas, repuestos, resultado) sobre su propia orden", async () => {
       const { tenant, adminActor, cliente } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
       await aprobarOrden(adminActor, orden.id);
       await asignarTecnico(adminActor, orden.id, { tecnicoAsignadoId: tecnico.usuarioId });
@@ -388,19 +414,19 @@ describe("órdenes de trabajo (RF-11)", () => {
       expect(actualizada.repuestosUtilizados).toBe("manguera nueva");
     });
 
-    it("un rol sólo con VER (Comercial) no puede editar campos administrativos de la orden", async () => {
+    it("un rol sólo con VER no puede editar campos administrativos de la orden", async () => {
       const { tenant, adminActor, cliente } = await setupBase();
-      const comercial = await crearActorConRol(tenant.id, "Comercial");
+      const soloLecturaActor = await crearActorSoloLectura(tenant.id);
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
 
-      await expect(updateOrdenTrabajo(comercial, orden.id, { observaciones: "prioridad alta" })).rejects.toThrow(ForbiddenError);
+      await expect(updateOrdenTrabajo(soloLecturaActor, orden.id, { observaciones: "prioridad alta" })).rejects.toThrow(ForbiddenError);
     });
   });
 
   describe("visibilidad y alcance", () => {
     it("un técnico (alcance PROPIO) sólo lista las órdenes que tiene asignadas", async () => {
       const { tenant, adminActor, cliente } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const asignada = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id, tecnicoAsignadoId: tecnico.usuarioId });
       await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
 
@@ -410,7 +436,7 @@ describe("órdenes de trabajo (RF-11)", () => {
 
     it("un técnico no puede ver por id una orden que no tiene asignada", async () => {
       const { tenant, adminActor, cliente } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
 
       const vista = await getOrdenTrabajo(tecnico, orden.id);
@@ -474,11 +500,11 @@ describe("órdenes de trabajo (RF-11)", () => {
     it("un técnico (alcance PROPIO) sólo ve en el listado paginado las órdenes que tiene asignadas", async () => {
       // A diferencia de Clientes (donde cualquier alcance != TODAS se trata
       // como sin visibilidad porque el scope ESTABLECIMIENTO_ASIGNADO/PROPIO
-      // todavía no se puede resolver), acá "Técnico de campo" sí tiene
+      // todavía no se puede resolver), acá "Técnico" sí tiene
       // alcance PROPIO resoluble: ve sus propias órdenes asignadas, igual que
       // en listOrdenesTrabajo (ver test de "visibilidad y alcance" arriba).
       const { tenant, adminActor, cliente } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const asignada = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id, tecnicoAsignadoId: tecnico.usuarioId });
       await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
 

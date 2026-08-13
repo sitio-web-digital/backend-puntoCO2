@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import type { RecursoPermiso } from "@prisma/client";
 import { prisma } from "../db/client";
 import { withTenant } from "../db/with-tenant";
 import { createTenant } from "../tenants/provisioning";
@@ -109,9 +110,38 @@ describe("inspecciones con checklist (RF-06)", () => {
     });
   }
 
+  /** Rol ad-hoc de sólo lectura (VER:TODAS sobre `recurso`, sin ningún
+   * permiso de escritura) — el catálogo por defecto ya no trae un rol
+   * "Auditor" de sólo lectura, pero el motor de permisos sigue soportando
+   * roles a medida como éste. */
+  async function crearActorSoloLectura(tenantId: string, recurso: RecursoPermiso) {
+    const unique = randomUUID().slice(0, 8);
+    const passwordHash = await hashPassword("clave-de-prueba-segura-123");
+    return withTenant({ tenantId }, async (tx) => {
+      const rol = await tx.rol.create({
+        data: {
+          tenantId,
+          nombre: `Solo lectura ${unique}`,
+          permisos: { create: { recurso, accion: "VER", alcance: "TODAS" } },
+        },
+      });
+      const usuario = await tx.usuario.create({
+        data: {
+          tenantId,
+          email: `lectura-${unique}@example.com`,
+          passwordHash,
+          nombre: "Lu",
+          apellido: "Lectora",
+          roles: { create: { rolId: rol.id } },
+        },
+      });
+      return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
+    });
+  }
+
   it("un técnico registra una inspección y queda asociada a la unidad, a su propio nombre", async () => {
     const { tenant, matafuego } = await setupMatafuego();
-    const tecnicoActor = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnicoActor = await crearActorConRol(tenant.id, "Técnico");
 
     const inspeccion = await crearInspeccion(tecnicoActor, {
       matafuegoId: matafuego.id,
@@ -198,8 +228,8 @@ describe("inspecciones con checklist (RF-06)", () => {
 
   it("un técnico (alcance PROPIO) sólo ve sus propias inspecciones en el listado", async () => {
     const { tenant, adminActor, matafuego } = await setupMatafuego();
-    const tecnicoA = await crearActorConRol(tenant.id, "Técnico de campo");
-    const tecnicoB = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnicoA = await crearActorConRol(tenant.id, "Técnico");
+    const tecnicoB = await crearActorConRol(tenant.id, "Técnico");
 
     const inspeccionDeA = await crearInspeccion(tecnicoA, { matafuegoId: matafuego.id, resultado: "APTO" });
     await crearInspeccion(tecnicoB, { matafuegoId: matafuego.id, resultado: "APTO" });
@@ -214,8 +244,8 @@ describe("inspecciones con checklist (RF-06)", () => {
 
   it("un técnico no puede ver la inspección de otro técnico por id", async () => {
     const { tenant, matafuego } = await setupMatafuego();
-    const tecnicoA = await crearActorConRol(tenant.id, "Técnico de campo");
-    const tecnicoB = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnicoA = await crearActorConRol(tenant.id, "Técnico");
+    const tecnicoB = await crearActorConRol(tenant.id, "Técnico");
 
     const inspeccion = await crearInspeccion(tecnicoA, { matafuegoId: matafuego.id, resultado: "APTO" });
 
@@ -223,11 +253,11 @@ describe("inspecciones con checklist (RF-06)", () => {
     await expect(getInspeccion(tecnicoA, inspeccion.id)).resolves.toMatchObject({ id: inspeccion.id });
   });
 
-  it("un auditor (sólo VER) no puede crear inspecciones", async () => {
+  it("un usuario sin permiso de creación (sólo VER) no puede crear inspecciones", async () => {
     const { tenant, matafuego } = await setupMatafuego();
-    const auditorActor = await crearActorConRol(tenant.id, "Auditor");
+    const soloLecturaActor = await crearActorSoloLectura(tenant.id, "INSPECCIONES");
 
-    await expect(crearInspeccion(auditorActor, { matafuegoId: matafuego.id, resultado: "APTO" })).rejects.toThrow(ForbiddenError);
+    await expect(crearInspeccion(soloLecturaActor, { matafuegoId: matafuego.id, resultado: "APTO" })).rejects.toThrow(ForbiddenError);
   });
 
   it("registra auditoría de alta de inspección y del cambio de estado del matafuego", async () => {

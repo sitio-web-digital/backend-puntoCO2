@@ -7,7 +7,7 @@ import { getEffectivePermissions } from "../rbac/effective-permissions";
 import { requirePermission, ForbiddenError } from "../rbac/permissions";
 import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import type { TenantActor } from "../clientes/service";
-import { getServicioSeleccionable, resolverPrecioVigente } from "../servicios/service";
+import { getServicioSeleccionable } from "../servicios/service";
 import { generarNotificacion } from "../notificaciones/service";
 import {
   createOrdenTrabajoSchema,
@@ -700,16 +700,13 @@ export async function agregarItemOrden(actor: TenantActor, ordenId: string, rawI
       await getMatafuegoOAsociadoError(tx, input.matafuegoId);
     }
 
-    // getServicioSeleccionable/resolverPrecioVigente abren su propia
-    // transacción (mismo patrón que crearOrdenDesdeInspeccion con
-    // Inspeccion): no hay escritura previa que perder atomicidad, sólo
-    // lecturas, así que no hace falta duplicar esa lógica acá.
+    // getServicioSeleccionable abre su propia transacción (mismo patrón que
+    // crearOrdenDesdeInspeccion con Inspeccion): no hay escritura previa que
+    // perder atomicidad, sólo lectura, así que no hace falta duplicar esa
+    // lógica acá.
     const servicio = await getServicioSeleccionable(actor, input.servicioId);
-    const precio = input.listaPrecioId
-      ? await resolverPrecioVigente(actor, servicio.id, input.listaPrecioId)
-      : await resolverPrecioVigente(actor, servicio.id);
-
-    const subtotal = precio.precio * input.cantidad;
+    const precioUnitario = servicio.precioBase.toNumber();
+    const subtotal = precioUnitario * input.cantidad;
 
     const item = await tx.ordenTrabajoItem.create({
       data: {
@@ -717,9 +714,9 @@ export async function agregarItemOrden(actor: TenantActor, ordenId: string, rawI
         ordenId,
         servicioId: servicio.id,
         ...(input.matafuegoId ? { matafuegoId: input.matafuegoId } : {}),
-        descripcion: precio.descripcion ?? servicio.nombre,
+        descripcion: servicio.descripcion ?? servicio.nombre,
         cantidad: input.cantidad,
-        precioUnitario: precio.precio,
+        precioUnitario,
         subtotal,
       },
     });

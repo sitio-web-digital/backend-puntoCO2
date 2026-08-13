@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import type { RecursoPermiso } from "@prisma/client";
 import { prisma } from "../db/client";
 import { withTenant } from "../db/with-tenant";
 import { createTenant } from "../tenants/provisioning";
@@ -90,6 +91,35 @@ describe("inventario técnico de matafuegos (RF-04)", () => {
           passwordHash,
           nombre: "Usuario",
           apellido: nombreRol,
+          roles: { create: { rolId: rol.id } },
+        },
+      });
+      return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
+    });
+  }
+
+  /** Rol ad-hoc de sólo lectura (VER:TODAS sobre `recurso`, sin ningún
+   * permiso de escritura) — el catálogo por defecto ya no trae un rol
+   * "Auditor" de sólo lectura, pero el motor de permisos sigue soportando
+   * roles a medida como éste. */
+  async function crearActorSoloLectura(tenantId: string, recurso: RecursoPermiso) {
+    const unique = randomUUID().slice(0, 8);
+    const passwordHash = await hashPassword("clave-de-prueba-segura-123");
+    return withTenant({ tenantId }, async (tx) => {
+      const rol = await tx.rol.create({
+        data: {
+          tenantId,
+          nombre: `Solo lectura ${unique}`,
+          permisos: { create: { recurso, accion: "VER", alcance: "TODAS" } },
+        },
+      });
+      const usuario = await tx.usuario.create({
+        data: {
+          tenantId,
+          email: `lectura-${unique}@example.com`,
+          passwordHash,
+          nombre: "Lu",
+          apellido: "Lectora",
           roles: { create: { rolId: rol.id } },
         },
       });
@@ -194,7 +224,7 @@ describe("inventario técnico de matafuegos (RF-04)", () => {
   it("un usuario sin permisos técnicos (alcance no-TODAS) no puede modificar un dato administrativo restringido", async () => {
     const { tenant, adminActor, cliente, establecimiento } = await setupTenantCompleto();
     const matafuego = await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
-    const tecnicoActor = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnicoActor = await crearActorConRol(tenant.id, "Técnico");
 
     await expect(updateMatafuego(tecnicoActor, matafuego.id, { fabricante: "Otro fabricante" })).rejects.toThrow(ForbiddenError);
   });
@@ -202,7 +232,7 @@ describe("inventario técnico de matafuegos (RF-04)", () => {
   it("un técnico de campo SÍ puede registrar los campos de relevamiento físico (operativos)", async () => {
     const { tenant, adminActor, cliente, establecimiento } = await setupTenantCompleto();
     const matafuego = await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
-    const tecnicoActor = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnicoActor = await crearActorConRol(tenant.id, "Técnico");
 
     const actualizado = await updateMatafuego(tecnicoActor, matafuego.id, {
       pesoVerificado: 4.8,
@@ -214,12 +244,12 @@ describe("inventario técnico de matafuegos (RF-04)", () => {
     expect(actualizado.estadoManometro).toBe("EN_RANGO");
   });
 
-  it("un auditor (sólo VER) no puede editar ni siquiera campos operativos", async () => {
+  it("un usuario sin permiso de edición (sólo VER) no puede editar ni siquiera campos operativos", async () => {
     const { tenant, adminActor, cliente, establecimiento } = await setupTenantCompleto();
     const matafuego = await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
-    const auditorActor = await crearActorConRol(tenant.id, "Auditor");
+    const soloLecturaActor = await crearActorSoloLectura(tenant.id, "MATAFUEGOS");
 
-    await expect(updateMatafuego(auditorActor, matafuego.id, { observaciones: "no debería poder" })).rejects.toThrow(ForbiddenError);
+    await expect(updateMatafuego(soloLecturaActor, matafuego.id, { observaciones: "no debería poder" })).rejects.toThrow(ForbiddenError);
   });
 
   it("mueve una unidad a otro sector/ubicación y registra el movimiento con origen, destino y usuario", async () => {
@@ -256,7 +286,7 @@ describe("inventario técnico de matafuegos (RF-04)", () => {
   it("un técnico no puede mover una unidad (requiere alcance TODAS)", async () => {
     const { tenant, adminActor, cliente, establecimiento } = await setupTenantCompleto();
     const matafuego = await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
-    const tecnicoActor = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnicoActor = await crearActorConRol(tenant.id, "Técnico");
     const otroSector = await createSector(adminActor, { establecimientoId: establecimiento.id, nombre: "x" });
 
     await expect(moverMatafuego(tecnicoActor, matafuego.id, { sectorDestinoId: otroSector.id })).rejects.toThrow(ForbiddenError);
@@ -326,11 +356,11 @@ describe("inventario técnico de matafuegos (RF-04)", () => {
     });
 
     it("un rol con alcance distinto de TODAS no ve nada en el listado paginado (fail closed)", async () => {
-      // Igual que listMatafuegos: "Técnico de campo" tiene MATAFUEGOS:VER con
+      // Igual que listMatafuegos: "Técnico" tiene MATAFUEGOS:VER con
       // alcance no-TODAS, que acá se trata como sin visibilidad.
       const { tenant, adminActor, cliente, establecimiento } = await setupTenantCompleto();
       await createMatafuego(adminActor, inputBase({ clienteId: cliente.id, establecimientoId: establecimiento.id }));
-      const tecnicoActor = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnicoActor = await crearActorConRol(tenant.id, "Técnico");
 
       const pagina = await listMatafuegosPaginado(tecnicoActor, { page: 1 });
 

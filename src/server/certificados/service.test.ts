@@ -46,7 +46,6 @@ describe("certificados y documentación técnica (RF-17)", () => {
         await tx.ordenTrabajoItem.deleteMany({ where: { tenantId } });
         await tx.ordenTrabajoUnidad.deleteMany({ where: { tenantId } });
         await tx.ordenTrabajo.deleteMany({ where: { tenantId } });
-        await tx.precioServicio.deleteMany({ where: { tenantId } });
         await tx.servicio.deleteMany({ where: { tenantId } });
         await tx.matafuego.deleteMany({ where: { tenantId } });
         await tx.establecimiento.deleteMany({ where: { tenantId } });
@@ -75,6 +74,34 @@ describe("certificados y documentación técnica (RF-17)", () => {
           passwordHash,
           nombre: "Usuario",
           apellido: nombreRol,
+          roles: { create: { rolId: rol.id } },
+        },
+      });
+      return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
+    });
+  }
+
+  /** Rol ad-hoc de sólo lectura (VER:TODAS sobre CERTIFICADOS, sin ningún
+   * permiso de escritura) — el catálogo por defecto ya no trae un rol
+   * "Comercial" con esta combinación exacta de permisos. */
+  async function crearActorSoloLectura(tenantId: string) {
+    const unique = randomUUID().slice(0, 8);
+    const passwordHash = await hashPassword("clave-de-prueba-segura-123");
+    return withTenant({ tenantId }, async (tx) => {
+      const rol = await tx.rol.create({
+        data: {
+          tenantId,
+          nombre: `Solo lectura ${unique}`,
+          permisos: { create: { recurso: "CERTIFICADOS", accion: "VER", alcance: "TODAS" } },
+        },
+      });
+      const usuario = await tx.usuario.create({
+        data: {
+          tenantId,
+          email: `lectura-${unique}@example.com`,
+          passwordHash,
+          nombre: "Lu",
+          apellido: "Lectora",
           roles: { create: { rolId: rol.id } },
         },
       });
@@ -163,11 +190,11 @@ describe("certificados y documentación técnica (RF-17)", () => {
       );
     });
 
-    it("un rol sin EMITIR (Comercial) no puede emitir certificados", async () => {
+    it("un rol sin EMITIR (sólo VER) no puede emitir certificados", async () => {
       const { tenant, ordenId } = await setupOrdenFinalizada();
-      const comercial = await crearActorConRol(tenant.id, "Comercial");
+      const soloLecturaActor = await crearActorSoloLectura(tenant.id);
 
-      await expect(emitirCertificado(comercial, { ordenTrabajoId: ordenId, tipo: "CERTIFICADO_RECARGA" })).rejects.toThrow(ForbiddenError);
+      await expect(emitirCertificado(soloLecturaActor, { ordenTrabajoId: ordenId, tipo: "CERTIFICADO_RECARGA" })).rejects.toThrow(ForbiddenError);
     });
   });
 
@@ -263,7 +290,7 @@ describe("certificados y documentación técnica (RF-17)", () => {
   describe("visibilidad y alcance", () => {
     it("un técnico (alcance PROPIO) sólo lista los certificados donde figura como responsable", async () => {
       const { tenant, adminActor, ordenId } = await setupOrdenFinalizada();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const propio = await emitirCertificado(adminActor, {
         ordenTrabajoId: ordenId,
@@ -336,7 +363,7 @@ describe("certificados y documentación técnica (RF-17)", () => {
       // clientes/service.ts), CERTIFICADOS sí resuelve el alcance PROPIO: filtra
       // por responsableTecnicoId en vez de devolver la lista vacía.
       const { tenant, adminActor, ordenId } = await setupOrdenFinalizada();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const propio = await emitirCertificado(adminActor, {
         ordenTrabajoId: ordenId,

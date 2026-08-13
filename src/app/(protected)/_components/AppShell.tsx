@@ -43,10 +43,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Administración",
-    links: [
-      { href: "/usuarios", label: "Usuarios" },
-      { href: "/soporte", label: "Soporte" },
-    ],
+    links: [{ href: "/usuarios", label: "Usuarios" }],
   },
 ];
 

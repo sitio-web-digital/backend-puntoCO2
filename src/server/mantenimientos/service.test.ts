@@ -332,7 +332,7 @@ describe("programación de mantenimientos (RF-08)", () => {
 
     it("un técnico (alcance PROPIO) sólo ve lo que tiene asignado", async () => {
       const { tenant, adminActor, matafuego } = await setupMatafuego();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const asignado = await crearMantenimientoProgramado(adminActor, {
         matafuegoId: matafuego.id,
@@ -352,7 +352,7 @@ describe("programación de mantenimientos (RF-08)", () => {
 
     it("un técnico no puede crear ni reprogramar mantenimientos (sólo VER)", async () => {
       const { tenant, adminActor, matafuego } = await setupMatafuego();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       await expect(
         crearMantenimientoProgramado(tecnico, { matafuegoId: matafuego.id, tipoServicio: "MANTENIMIENTO", fechaProgramada: new Date(Date.now() + 86_400_000) }),
@@ -438,7 +438,7 @@ describe("programación de mantenimientos (RF-08)", () => {
 
     it("un técnico (alcance PROPIO) sólo ve en el paginado lo que tiene asignado", async () => {
       const { tenant, adminActor, matafuego } = await setupMatafuego();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const asignado = await crearMantenimientoProgramado(adminActor, {
         matafuegoId: matafuego.id,
@@ -502,7 +502,7 @@ describe("programación de mantenimientos (RF-08)", () => {
     it("un técnico (alcance PROPIO en VER) no ve nada en el paginado de reglas: es un recurso administrativo (fail closed)", async () => {
       const { tenant, adminActor } = await setupMatafuego();
       await crearReglaMantenimiento(adminActor, { tipoServicio: "RECARGA", frecuenciaMeses: 12 });
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const pagina = await listReglasMantenimientoPaginado(tecnico, { page: 1 });
 

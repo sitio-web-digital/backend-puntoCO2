@@ -2,19 +2,9 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ROLE_TEMPLATES } from "./default-roles";
 
 describe("catálogo de roles por defecto (RF-27)", () => {
-  it("define exactamente los 9 roles iniciales tenant-scoped del documento de requisitos", () => {
+  it("define exactamente los 3 roles tenant-scoped del catálogo simplificado", () => {
     const nombres = DEFAULT_ROLE_TEMPLATES.map((r) => r.nombre);
-    expect(nombres).toEqual([
-      "Administrador de empresa",
-      "Responsable técnico",
-      "Técnico de campo",
-      "Operador de taller",
-      "Comercial",
-      "Facturación",
-      "Cobranza",
-      "Auditor",
-      "Cliente externo",
-    ]);
+    expect(nombres).toEqual(["Administrador de empresa", "Técnico", "Cliente externo"]);
   });
 
   it("no incluye al Superadministrador SaaS (es un flag de plataforma, no un rol de tenant)", () => {
@@ -37,8 +27,8 @@ describe("catálogo de roles por defecto (RF-27)", () => {
     expect(usuariosEliminar?.alcance).toBe("TODAS");
   });
 
-  it("Técnico de campo nunca tiene alcance TODAS para escribir (rol de menor privilegio operativo)", () => {
-    const tecnico = DEFAULT_ROLE_TEMPLATES.find((r) => r.nombre === "Técnico de campo")!;
+  it("Técnico nunca tiene alcance TODAS para escribir (rol de menor privilegio operativo)", () => {
+    const tecnico = DEFAULT_ROLE_TEMPLATES.find((r) => r.nombre === "Técnico")!;
     const escrituraConAlcanceTodas = tecnico.permisos.filter((p) => p.alcance === "TODAS" && p.accion !== "VER");
     expect(escrituraConAlcanceTodas).toEqual([]);
   });
@@ -47,16 +37,16 @@ describe("catálogo de roles por defecto (RF-27)", () => {
   // para que el técnico pueda ver el catálogo al agregar un ítem a su propia
   // orden asignada (RF-11) — ver comentario junto al grant en
   // DEFAULT_ROLE_TEMPLATES para el detalle.
-  it("el único alcance TODAS de Técnico de campo es VER sobre el catálogo de servicios y precios", () => {
-    const tecnico = DEFAULT_ROLE_TEMPLATES.find((r) => r.nombre === "Técnico de campo")!;
+  it("el único alcance TODAS de Técnico es VER sobre el catálogo de servicios y precios", () => {
+    const tecnico = DEFAULT_ROLE_TEMPLATES.find((r) => r.nombre === "Técnico")!;
     const conAlcanceTodas = tecnico.permisos.filter((p) => p.alcance === "TODAS");
     expect(conAlcanceTodas).toEqual([{ recurso: "SERVICIOS_PRECIOS", accion: "VER", alcance: "TODAS" }]);
   });
 
-  it("Auditor sólo tiene permisos de VER o EXPORTAR, nunca de escritura", () => {
-    const auditor = DEFAULT_ROLE_TEMPLATES.find((r) => r.nombre === "Auditor")!;
-    const accionesDeEscritura = auditor.permisos.filter((p) => !["VER", "EXPORTAR"].includes(p.accion));
-    expect(accionesDeEscritura).toEqual([]);
+  it("Técnico nunca tiene permiso APROBAR (las aprobaciones quedan reservadas a Administrador)", () => {
+    const tecnico = DEFAULT_ROLE_TEMPLATES.find((r) => r.nombre === "Técnico")!;
+    const aprobaciones = tecnico.permisos.filter((p) => p.accion === "APROBAR");
+    expect(aprobaciones).toEqual([]);
   });
 
   it("Cliente externo sólo ve/aprueba lo PROPIO, nunca datos de otros clientes", () => {

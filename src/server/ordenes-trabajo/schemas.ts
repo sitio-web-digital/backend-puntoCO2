@@ -54,7 +54,6 @@ export const agregarItemOrdenSchema = z.object({
   servicioId: z.string().min(1, "El servicio es obligatorio"),
   matafuegoId: z.string().min(1).optional(),
   cantidad: z.number().int().positive().default(1),
-  listaPrecioId: z.string().min(1).optional(),
 });
 export type AgregarItemOrdenInput = z.input<typeof agregarItemOrdenSchema>;
 

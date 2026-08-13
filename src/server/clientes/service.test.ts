@@ -56,20 +56,29 @@ describe("gestión de clientes (RF-01)", () => {
     return { tenant, adminActor };
   }
 
-  /** Crea un usuario con el rol Auditor (sólo VER/EXPORTAR) para probar denegación. */
-  async function crearActorAuditor(tenantId: string) {
+  /** Crea un usuario con un rol ad-hoc de sólo lectura (VER:TODAS sobre
+   * CLIENTES, sin ningún permiso de escritura) para probar denegación. El
+   * catálogo por defecto ya no trae un rol "Auditor" de sólo lectura, pero
+   * el motor de permisos sigue soportando roles a medida como éste. */
+  async function crearActorSoloLectura(tenantId: string) {
     const unique = randomUUID().slice(0, 8);
     const passwordHash = await hashPassword("clave-de-prueba-segura-123");
     return withTenant({ tenantId }, async (tx) => {
-      const rolAuditor = await tx.rol.findFirstOrThrow({ where: { tenantId, nombre: "Auditor" } });
+      const rol = await tx.rol.create({
+        data: {
+          tenantId,
+          nombre: `Solo lectura ${unique}`,
+          permisos: { create: { recurso: "CLIENTES", accion: "VER", alcance: "TODAS" } },
+        },
+      });
       const usuario = await tx.usuario.create({
         data: {
           tenantId,
-          email: `auditor-${unique}@example.com`,
+          email: `lectura-${unique}@example.com`,
           passwordHash,
-          nombre: "Ana",
-          apellido: "Auditora",
-          roles: { create: { rolId: rolAuditor.id } },
+          nombre: "Lu",
+          apellido: "Lectora",
+          roles: { create: { rolId: rol.id } },
         },
       });
       return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
@@ -187,27 +196,27 @@ describe("gestión de clientes (RF-01)", () => {
 
   it("un usuario sin permiso de creación no puede dar de alta un cliente", async () => {
     const { tenant } = await setupTenant();
-    const auditorActor = await crearActorAuditor(tenant.id);
+    const soloLecturaActor = await crearActorSoloLectura(tenant.id);
 
-    await expect(createCliente(auditorActor, personaHumanaInput())).rejects.toThrow(ForbiddenError);
+    await expect(createCliente(soloLecturaActor, personaHumanaInput())).rejects.toThrow(ForbiddenError);
   });
 
   it("un usuario sin permiso de edición no puede modificar un cliente aunque pueda verlo", async () => {
     const { tenant, adminActor } = await setupTenant();
     const cliente = await createCliente(adminActor, personaHumanaInput());
-    const auditorActor = await crearActorAuditor(tenant.id);
+    const soloLecturaActor = await crearActorSoloLectura(tenant.id);
 
-    await expect(updateCliente(auditorActor, cliente.id, { email: "x@example.com" })).rejects.toThrow(ForbiddenError);
-    // Pero sí puede verlo (rol Auditor tiene VER TODAS).
-    await expect(getCliente(auditorActor, cliente.id)).resolves.toMatchObject({ id: cliente.id });
+    await expect(updateCliente(soloLecturaActor, cliente.id, { email: "x@example.com" })).rejects.toThrow(ForbiddenError);
+    // Pero sí puede verlo (rol de sólo lectura tiene VER TODAS).
+    await expect(getCliente(soloLecturaActor, cliente.id)).resolves.toMatchObject({ id: cliente.id });
   });
 
   it("un usuario sin permiso de eliminación no puede dar de baja un cliente", async () => {
     const { tenant, adminActor } = await setupTenant();
     const cliente = await createCliente(adminActor, personaHumanaInput());
-    const auditorActor = await crearActorAuditor(tenant.id);
+    const soloLecturaActor = await crearActorSoloLectura(tenant.id);
 
-    await expect(darDeBajaCliente(auditorActor, cliente.id)).rejects.toThrow(ForbiddenError);
+    await expect(darDeBajaCliente(soloLecturaActor, cliente.id)).rejects.toThrow(ForbiddenError);
   });
 
   it("lanza ClienteNotFoundError al operar sobre un id inexistente", async () => {
@@ -279,13 +288,13 @@ describe("gestión de clientes (RF-01)", () => {
     });
 
     it("un rol con alcance distinto de TODAS no ve nada en el listado paginado (fail closed)", async () => {
-      // "Técnico de campo" tiene CLIENTES:VER con alcance ESTABLECIMIENTO_ASIGNADO,
+      // "Técnico" tiene CLIENTES:VER con alcance ESTABLECIMIENTO_ASIGNADO,
       // que el servicio todavía no resuelve — se trata como sin visibilidad (ver
       // comentario de requireScopeTodasOrDeny en service.ts), a diferencia de
-      // "Auditor" que sí tiene alcance TODAS y por lo tanto vería el listado.
+      // un rol con alcance TODAS que sí vería el listado.
       const { tenant, adminActor } = await setupTenant();
       await createCliente(adminActor, personaHumanaInput());
-      const tecnicoActor = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnicoActor = await crearActorConRol(tenant.id, "Técnico");
 
       const pagina = await listClientesPaginado(tecnicoActor, { page: 1 });
 

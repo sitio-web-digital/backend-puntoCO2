@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import type { RecursoPermiso } from "@prisma/client";
 import { prisma } from "../db/client";
 import { withTenant } from "../db/with-tenant";
 import { createTenant } from "../tenants/provisioning";
@@ -107,6 +108,35 @@ describe("gestión de no conformidades (RF-07)", () => {
     });
   }
 
+  /** Rol ad-hoc de sólo lectura (VER:TODAS sobre `recurso`, sin ningún
+   * permiso de escritura) — el catálogo por defecto ya no trae un rol
+   * "Auditor" de sólo lectura, pero el motor de permisos sigue soportando
+   * roles a medida como éste. */
+  async function crearActorSoloLectura(tenantId: string, recurso: RecursoPermiso) {
+    const unique = randomUUID().slice(0, 8);
+    const passwordHash = await hashPassword("clave-de-prueba-segura-123");
+    return withTenant({ tenantId }, async (tx) => {
+      const rol = await tx.rol.create({
+        data: {
+          tenantId,
+          nombre: `Solo lectura ${unique}`,
+          permisos: { create: { recurso, accion: "VER", alcance: "TODAS" } },
+        },
+      });
+      const usuario = await tx.usuario.create({
+        data: {
+          tenantId,
+          email: `lectura-${unique}@example.com`,
+          passwordHash,
+          nombre: "Lu",
+          apellido: "Lectora",
+          roles: { create: { rolId: rol.id } },
+        },
+      });
+      return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
+    });
+  }
+
   function ncInputBase(matafuegoId: string, overrides: Partial<Parameters<typeof crearNoConformidad>[1]> = {}) {
     return {
       matafuegoId,
@@ -175,7 +205,7 @@ describe("gestión de no conformidades (RF-07)", () => {
 
   it("asigna un responsable: pasa de ABIERTA a ASIGNADA", async () => {
     const { tenant, adminActor, matafuego } = await setupMatafuego();
-    const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnico = await crearActorConRol(tenant.id, "Técnico");
     const nc = await crearNoConformidad(adminActor, ncInputBase(matafuego.id));
 
     const asignada = await asignarResponsable(adminActor, nc.id, { responsableId: tecnico.usuarioId });
@@ -192,7 +222,7 @@ describe("gestión de no conformidades (RF-07)", () => {
 
   it("un técnico (alcance PROPIO en EDITAR) no puede asignar responsables (acción reservada a TODAS)", async () => {
     const { tenant, adminActor, matafuego } = await setupMatafuego();
-    const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnico = await crearActorConRol(tenant.id, "Técnico");
     const nc = await crearNoConformidad(tecnico, ncInputBase(matafuego.id));
 
     await expect(asignarResponsable(tecnico, nc.id, { responsableId: tecnico.usuarioId })).rejects.toThrow(ForbiddenError);
@@ -201,7 +231,7 @@ describe("gestión de no conformidades (RF-07)", () => {
 
   it("el técnico responsable puede iniciar tratamiento y resolver lo suyo", async () => {
     const { tenant, adminActor, matafuego } = await setupMatafuego();
-    const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnico = await crearActorConRol(tenant.id, "Técnico");
     const nc = await crearNoConformidad(adminActor, ncInputBase(matafuego.id));
     await asignarResponsable(adminActor, nc.id, { responsableId: tecnico.usuarioId });
 
@@ -215,8 +245,8 @@ describe("gestión de no conformidades (RF-07)", () => {
 
   it("un técnico ajeno (ni la reportó ni es responsable) no puede tocarla", async () => {
     const { tenant, adminActor, matafuego } = await setupMatafuego();
-    const tecnicoResponsable = await crearActorConRol(tenant.id, "Técnico de campo");
-    const tecnicoAjeno = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnicoResponsable = await crearActorConRol(tenant.id, "Técnico");
+    const tecnicoAjeno = await crearActorConRol(tenant.id, "Técnico");
     const nc = await crearNoConformidad(adminActor, ncInputBase(matafuego.id));
     await asignarResponsable(adminActor, nc.id, { responsableId: tecnicoResponsable.usuarioId });
 
@@ -232,7 +262,7 @@ describe("gestión de no conformidades (RF-07)", () => {
 
   it("verificar es una acción reservada a alcance TODAS, no la puede hacer el técnico que resolvió", async () => {
     const { tenant, adminActor, matafuego } = await setupMatafuego();
-    const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnico = await crearActorConRol(tenant.id, "Técnico");
     const nc = await crearNoConformidad(adminActor, ncInputBase(matafuego.id));
     await asignarResponsable(adminActor, nc.id, { responsableId: tecnico.usuarioId });
     await resolverNoConformidad(tecnico, nc.id, { resolucion: "listo" });
@@ -295,8 +325,8 @@ describe("gestión de no conformidades (RF-07)", () => {
 
   it("un técnico (alcance PROPIO) sólo lista las no conformidades que reportó o tiene asignadas", async () => {
     const { tenant, adminActor, matafuego } = await setupMatafuego();
-    const tecnicoA = await crearActorConRol(tenant.id, "Técnico de campo");
-    const tecnicoB = await crearActorConRol(tenant.id, "Técnico de campo");
+    const tecnicoA = await crearActorConRol(tenant.id, "Técnico");
+    const tecnicoB = await crearActorConRol(tenant.id, "Técnico");
 
     const ncDeA = await crearNoConformidad(tecnicoA, ncInputBase(matafuego.id));
     const ncAsignadaAA = await crearNoConformidad(adminActor, ncInputBase(matafuego.id));
@@ -307,11 +337,11 @@ describe("gestión de no conformidades (RF-07)", () => {
     expect(listadoA.map((n) => n.id).sort()).toEqual([ncDeA.id, ncAsignadaAA.id].sort());
   });
 
-  it("un auditor no puede crear no conformidades", async () => {
+  it("un usuario sin permiso de creación (sólo VER) no puede crear no conformidades", async () => {
     const { tenant, matafuego } = await setupMatafuego();
-    const auditor = await crearActorConRol(tenant.id, "Auditor");
+    const soloLecturaActor = await crearActorSoloLectura(tenant.id, "NO_CONFORMIDADES");
 
-    await expect(crearNoConformidad(auditor, ncInputBase(matafuego.id))).rejects.toThrow(ForbiddenError);
+    await expect(crearNoConformidad(soloLecturaActor, ncInputBase(matafuego.id))).rejects.toThrow(ForbiddenError);
   });
 
   it("registra auditoría en cada transición de estado", async () => {
@@ -376,8 +406,8 @@ describe("gestión de no conformidades (RF-07)", () => {
 
     it("un técnico (alcance PROPIO) sólo ve en el paginado las que reportó o tiene asignadas", async () => {
       const { tenant, adminActor, matafuego } = await setupMatafuego();
-      const tecnicoA = await crearActorConRol(tenant.id, "Técnico de campo");
-      const tecnicoB = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnicoA = await crearActorConRol(tenant.id, "Técnico");
+      const tecnicoB = await crearActorConRol(tenant.id, "Técnico");
 
       const ncDeA = await crearNoConformidad(tecnicoA, ncInputBase(matafuego.id));
       const ncAsignadaAA = await crearNoConformidad(adminActor, ncInputBase(matafuego.id));

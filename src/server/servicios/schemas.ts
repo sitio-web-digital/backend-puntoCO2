@@ -41,19 +41,3 @@ export type CreateServicioInput = z.input<typeof createServicioSchema>;
 
 export const updateServicioSchema = baseServicioSchema.partial();
 export type UpdateServicioInput = z.input<typeof updateServicioSchema>;
-
-export const createListaPrecioSchema = z.object({
-  nombre: z.string().trim().min(1, "El nombre es obligatorio").max(150),
-  descripcion: z.string().trim().max(500).optional(),
-  esPredeterminada: z.boolean().default(false),
-});
-export type CreateListaPrecioInput = z.input<typeof createListaPrecioSchema>;
-
-export const updateListaPrecioSchema = createListaPrecioSchema.partial();
-export type UpdateListaPrecioInput = z.input<typeof updateListaPrecioSchema>;
-
-export const fijarPrecioSchema = z.object({
-  precio: z.number().nonnegative("El precio no puede ser negativo"),
-  vigenteDesde: z.coerce.date().optional(),
-});
-export type FijarPrecioInput = z.input<typeof fijarPrecioSchema>;

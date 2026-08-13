@@ -106,6 +106,36 @@ describe("retiro, traslado y cadena de custodia (RF-12)", () => {
     });
   }
 
+  /** Rol ad-hoc de sólo lectura (VER:TODAS sobre RETIROS_ENTREGAS, sin
+   * ningún permiso de escritura) — a diferencia del catálogo anterior
+   * ("Operador de taller"), el rol "Técnico" fusionado sí puede CREAR
+   * retiros/entregas (RF-12), así que este caso ya no lo cubre ningún rol
+   * de plantilla y se arma a medida. */
+  async function crearActorSoloLectura(tenantId: string) {
+    const unique = randomUUID().slice(0, 8);
+    const passwordHash = await hashPassword("clave-de-prueba-segura-123");
+    return withTenant({ tenantId }, async (tx) => {
+      const rol = await tx.rol.create({
+        data: {
+          tenantId,
+          nombre: `Solo lectura ${unique}`,
+          permisos: { create: { recurso: "RETIROS_ENTREGAS", accion: "VER", alcance: "TODAS" } },
+        },
+      });
+      const usuario = await tx.usuario.create({
+        data: {
+          tenantId,
+          email: `lectura-${unique}@example.com`,
+          passwordHash,
+          nombre: "Lu",
+          apellido: "Lectora",
+          roles: { create: { rolId: rol.id } },
+        },
+      });
+      return { tenantId, usuarioId: usuario.id } satisfies TenantActor;
+    });
+  }
+
   describe("registrar retiro", () => {
     it("sin destino, registra el retiro en estado RETIRADO y actualiza la unidad", async () => {
       const { tenant, adminActor, matafuego } = await setupBase();
@@ -148,7 +178,7 @@ describe("retiro, traslado y cadena de custodia (RF-12)", () => {
 
     it("un técnico de campo (CREAR:PROPIO) registra el retiro asignándose a sí mismo como responsable", async () => {
       const { tenant, matafuego } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const registro = await registrarRetiro(tecnico, { matafuegoId: matafuego.id });
       expect(registro.tecnicoResponsableId).toBe(tecnico.usuarioId);
@@ -156,17 +186,17 @@ describe("retiro, traslado y cadena de custodia (RF-12)", () => {
 
     it("un técnico de campo no puede registrar un retiro a nombre de otro usuario", async () => {
       const { tenant, adminActor, matafuego } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       await expect(
         registrarRetiro(tecnico, { matafuegoId: matafuego.id, tecnicoResponsableId: adminActor.usuarioId }),
       ).rejects.toThrow(ForbiddenError);
     });
 
-    it("un rol sin CREAR (Operador de taller) no puede registrar retiros", async () => {
+    it("un rol sin CREAR (sólo VER) no puede registrar retiros", async () => {
       const { tenant, matafuego } = await setupBase();
-      const operador = await crearActorConRol(tenant.id, "Operador de taller");
-      await expect(registrarRetiro(operador, { matafuegoId: matafuego.id })).rejects.toThrow(ForbiddenError);
+      const soloLecturaActor = await crearActorSoloLectura(tenant.id);
+      await expect(registrarRetiro(soloLecturaActor, { matafuegoId: matafuego.id })).rejects.toThrow(ForbiddenError);
     });
   });
 
@@ -197,8 +227,8 @@ describe("retiro, traslado y cadena de custodia (RF-12)", () => {
 
     it("ingresarATaller transfiere la custodia a quien recibe, aunque no fuera el responsable previo", async () => {
       const { tenant, matafuego } = await setupBase();
-      const tecnicoCampo = await crearActorConRol(tenant.id, "Técnico de campo");
-      const operadorTaller = await crearActorConRol(tenant.id, "Operador de taller");
+      const tecnicoCampo = await crearActorConRol(tenant.id, "Técnico");
+      const operadorTaller = await crearActorConRol(tenant.id, "Técnico");
 
       const registro = await registrarRetiro(tecnicoCampo, { matafuegoId: matafuego.id });
       expect(registro.tecnicoResponsableId).toBe(tecnicoCampo.usuarioId);
@@ -231,7 +261,7 @@ describe("retiro, traslado y cadena de custodia (RF-12)", () => {
 
     it("cancelar exige un motivo y está reservado a alcance TODAS", async () => {
       const { tenant, adminActor, matafuego } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const registro = await registrarRetiro(adminActor, { matafuegoId: matafuego.id });
 
       await expect(cancelarRetiroEntrega(adminActor, registro.id, "")).rejects.toThrow(MotivoCancelacionRequeridoInvalidoError);
@@ -245,7 +275,7 @@ describe("retiro, traslado y cadena de custodia (RF-12)", () => {
   describe("visibilidad y alcance", () => {
     it("un técnico (alcance PROPIO) sólo lista los registros que tiene bajo su custodia", async () => {
       const { tenant, adminActor, matafuego, cliente, establecimiento } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const propio = await registrarRetiro(tecnico, { matafuegoId: matafuego.id });
 
@@ -335,10 +365,10 @@ describe("retiro, traslado y cadena de custodia (RF-12)", () => {
 
     it("un técnico (alcance PROPIO) sólo ve en el listado paginado los registros que tiene bajo su custodia", async () => {
       // Igual que en listRetirosEntregas ("visibilidad y alcance" arriba):
-      // "Técnico de campo" tiene alcance PROPIO resoluble para este recurso,
+      // "Técnico" tiene alcance PROPIO resoluble para este recurso,
       // así que ve sus propios registros en vez de una lista vacía.
       const { tenant, adminActor, matafuego, cliente, establecimiento } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const propio = await registrarRetiro(tecnico, { matafuegoId: matafuego.id });
 

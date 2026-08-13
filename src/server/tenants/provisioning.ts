@@ -44,7 +44,7 @@ interface CreateTenantActor {
 }
 
 /**
- * Da de alta un tenant nuevo: crea la empresa, siembra los 9 roles por
+ * Da de alta un tenant nuevo: crea la empresa, siembra los 3 roles por
  * defecto de RF-27 y crea su primer usuario con el rol "Administrador de
  * empresa". Todo en una única transacción: si algo falla, no queda un tenant
  * a medio crear sin usuarios que puedan operarlo.

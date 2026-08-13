@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireSuperAdmin } from "@/server/auth/current-user";
 import { resumenPlataforma } from "@/server/platform/service";
 
@@ -59,19 +58,6 @@ export default async function SuperAdminResumenPage() {
             </span>
           ))}
         </div>
-      </div>
-
-      <div className="card row-between" style={{ flexWrap: "wrap", gap: 12 }}>
-        <div className="stack" style={{ gap: 2 }}>
-          <h2>Soporte</h2>
-          <p className="muted" style={{ margin: 0 }}>
-            {resumen.ticketsAbiertos} ticket{resumen.ticketsAbiertos === 1 ? "" : "s"} abierto{resumen.ticketsAbiertos === 1 ? "" : "s"} o en
-            progreso.
-          </p>
-        </div>
-        <Link href="/admin/soporte" className="btn-secondary">
-          Ver soporte
-        </Link>
       </div>
     </div>
   );

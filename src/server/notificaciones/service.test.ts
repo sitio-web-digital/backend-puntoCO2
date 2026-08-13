@@ -247,7 +247,7 @@ describe("notificaciones automáticas (RF-19)", () => {
 
     it("un técnico (alcance PROPIO) no puede procesar la cola", async () => {
       const { tenant } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       await expect(procesarNotificacionesPendientes(tecnico)).rejects.toThrow(ForbiddenError);
     });
   });
@@ -313,7 +313,7 @@ describe("notificaciones automáticas (RF-19)", () => {
 
     it("un técnico (alcance PROPIO) no puede disparar el escaneo", async () => {
       const { tenant } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       await expect(escanearVencimientosYGenerarNotificaciones(tecnico)).rejects.toThrow(ForbiddenError);
     });
   });
@@ -333,7 +333,7 @@ describe("notificaciones automáticas (RF-19)", () => {
   describe("lectura, cancelación y alcance", () => {
     it("el destinatario puede marcar como leída su propia notificación enviada", async () => {
       const { tenant, adminActor } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const creada = await withTenant({ tenantId: tenant.id }, (tx) =>
         generarNotificacion(tx, {
           tenantId: tenant.id,
@@ -371,7 +371,7 @@ describe("notificaciones automáticas (RF-19)", () => {
 
     it("cancela una notificación pendiente, reservado a alcance TODAS", async () => {
       const { tenant, adminActor } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const creada = await withTenant({ tenantId: tenant.id }, (tx) =>
         generarNotificacion(tx, {
           tenantId: tenant.id,
@@ -391,7 +391,7 @@ describe("notificaciones automáticas (RF-19)", () => {
 
     it("un técnico (alcance PROPIO) sólo lista sus propias notificaciones", async () => {
       const { tenant, adminActor } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const propia = await withTenant({ tenantId: tenant.id }, (tx) =>
         generarNotificacion(tx, {
@@ -499,7 +499,7 @@ describe("notificaciones automáticas (RF-19)", () => {
       // Igual que CERTIFICADOS (y a diferencia de CLIENTES): el alcance PROPIO
       // no es "sin visibilidad", filtra por usuarioId en vez de devolver vacío.
       const { tenant, adminActor } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
 
       const propia = await withTenant({ tenantId: tenant.id }, (tx) =>
         generarNotificacion(tx, {

@@ -44,7 +44,6 @@ describe("reportes e indicadores (RF-26)", () => {
         await tx.ordenTrabajoItem.deleteMany({ where: { tenantId } });
         await tx.ordenTrabajoUnidad.deleteMany({ where: { tenantId } });
         await tx.ordenTrabajo.deleteMany({ where: { tenantId } });
-        await tx.precioServicio.deleteMany({ where: { tenantId } });
         await tx.servicio.deleteMany({ where: { tenantId } });
         await tx.mantenimientoProgramado.deleteMany({ where: { tenantId } });
         await tx.reglaMantenimiento.deleteMany({ where: { tenantId } });
@@ -259,7 +258,7 @@ describe("reportes e indicadores (RF-26)", () => {
 
     it("agrupa productividad por técnico según órdenes finalizadas", async () => {
       const { tenant, adminActor, cliente } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       const servicio = await crearServicio(adminActor, { codigo: "RC-2", nombre: "Recarga", categoria: "RECARGA", precioBase: 1000 });
 
       const orden = await crearOrdenTrabajo(adminActor, { clienteId: cliente.id });
@@ -338,7 +337,7 @@ describe("reportes e indicadores (RF-26)", () => {
   describe("acceso y RBAC", () => {
     it("un rol sin permiso de REPORTES (técnico de campo) no puede generar ningún reporte", async () => {
       const { tenant } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       await expect(reporteUnidadesVencidas(tecnico)).rejects.toThrow(ForbiddenError);
     });
 

@@ -53,17 +53,16 @@ export async function resumenPlataforma() {
   return withTenant({ tenantId: null, bypassRls: true }, async (tx) => {
     await aplicarVencimientosPendientes(tx);
 
-    const [porEstado, totalUsuarios, totalMatafuegos, ticketsAbiertos] = await Promise.all([
+    const [porEstado, totalUsuarios, totalMatafuegos] = await Promise.all([
       tx.tenant.groupBy({ by: ["estado"], _count: { _all: true } }),
       tx.usuario.count({ where: { tenantId: { not: null } } }),
       tx.matafuego.count(),
-      tx.ticketSoporte.count({ where: { estado: { in: ["ABIERTO", "EN_PROGRESO"] } } }),
     ]);
 
     const conteoPorEstado = Object.fromEntries(porEstado.map((r) => [r.estado, r._count._all])) as Record<string, number>;
     const totalEmpresas = porEstado.reduce((acc, r) => acc + r._count._all, 0);
 
-    return { totalEmpresas, conteoPorEstado, totalUsuarios, totalMatafuegos, ticketsAbiertos };
+    return { totalEmpresas, conteoPorEstado, totalUsuarios, totalMatafuegos };
   });
 }
 

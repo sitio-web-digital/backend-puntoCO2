@@ -210,7 +210,7 @@ export async function updateMatafuego(actor: TenantActor, matafuegoId: string, r
     const scope = requirePermission(effective, RECURSO, "EDITAR");
 
     if (scope !== "TODAS") {
-      // Alcance no administrativo (p. ej. Técnico de campo): sólo puede tocar
+      // Alcance no administrativo (p. ej. Técnico): sólo puede tocar
       // los campos de relevamiento físico, nunca datos administrativos como
       // código interno, tipo de agente, fabricante, etc.
       const camposNoPermitidos = Object.keys(input).filter((campo) => !CAMPOS_OPERATIVOS.has(campo));

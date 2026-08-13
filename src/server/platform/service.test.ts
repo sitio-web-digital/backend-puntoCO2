@@ -183,7 +183,7 @@ describe("panel de plataforma (superadmin SaaS)", () => {
     expect(encontrado?.estado).toBe("VENCIDO");
   });
 
-  it("resumenPlataforma cuenta empresas por estado y tickets abiertos", async () => {
+  it("resumenPlataforma cuenta empresas por estado", async () => {
     const { tenant } = await crearTenantDePrueba();
     await suspenderTenantPlataforma(superAdminActor, tenant.id);
 
@@ -191,6 +191,5 @@ describe("panel de plataforma (superadmin SaaS)", () => {
 
     expect(resumen.totalEmpresas).toBeGreaterThanOrEqual(1);
     expect(resumen.conteoPorEstado.SUSPENDIDO).toBeGreaterThanOrEqual(1);
-    expect(typeof resumen.ticketsAbiertos).toBe("number");
   });
 });

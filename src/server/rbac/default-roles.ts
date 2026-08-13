@@ -42,9 +42,15 @@ const TODOS_LOS_RECURSOS_TENANT: RecursoPermiso[] = [
  * plataforma (RF-28), no de negocio dentro de un tenant, así que no tiene fila
  * en Rol/RolPermiso.
  *
- * FACTURACION y COBRANZA sólo tienen acceso de lectura sobre los recursos que
- * ya existen (RF-23/RF-24 son segunda etapa); cuando se implementen esos
- * módulos, sumar sus recursos propios y ampliar estos dos roles.
+ * Catálogo deliberadamente chico (3 roles, no una matriz de puestos por
+ * departamento): el cliente final de esta SaaS es una empresa pequeña, no
+ * técnica, y elegir entre 9 roles al dar de alta un empleado era fricción
+ * sin beneficio real (nunca hubo pantalla para crear/editar roles custom).
+ * Administrador cubre todo lo comercial/administrativo que antes tenían
+ * Comercial/Facturación/Cobranza/Auditor por separado. Técnico une a los
+ * tres roles de campo/taller anteriores, siempre con alcance PROPIO (nunca
+ * TODAS salvo VER de servicios/precios) — las aprobaciones quedan
+ * reservadas a Administrador para no auto-aprobar el propio trabajo.
  */
 export const DEFAULT_ROLE_TEMPLATES: RoleTemplate[] = [
   {
@@ -53,104 +59,29 @@ export const DEFAULT_ROLE_TEMPLATES: RoleTemplate[] = [
     permisos: TODOS_LOS_RECURSOS_TENANT.flatMap((recurso) => grants(recurso, TODAS_LAS_ACCIONES, "TODAS")),
   },
   {
-    nombre: "Responsable técnico",
-    descripcion: "Supervisión técnica de toda la operación: inspecciones, mantenimientos, certificados.",
-    permisos: [
-      ...grants("CLIENTES", ["VER"], "TODAS"),
-      ...grants("ESTABLECIMIENTOS", ["VER", "EDITAR"], "TODAS"),
-      ...grants("MATAFUEGOS", ["VER", "CREAR", "EDITAR"], "TODAS"),
-      ...grants("INSPECCIONES", ["VER", "CREAR", "EDITAR", "APROBAR"], "TODAS"),
-      ...grants("NO_CONFORMIDADES", ["VER", "CREAR", "EDITAR", "APROBAR"], "TODAS"),
-      ...grants("MANTENIMIENTOS", ["VER", "CREAR", "EDITAR"], "TODAS"),
-      ...grants("SERVICIOS_PRECIOS", ["VER"], "TODAS"),
-      ...grants("ORDENES_TRABAJO", ["VER", "CREAR", "EDITAR", "APROBAR"], "TODAS"),
-      ...grants("RETIROS_ENTREGAS", ["VER", "CREAR", "EDITAR"], "TODAS"),
-      ...grants("CERTIFICADOS", ["VER", "CREAR", "EMITIR"], "TODAS"),
-      ...grants("NOTIFICACIONES", ["VER"], "TODAS"),
-      ...grants("REPORTES", ["VER"], "TODAS"),
-    ],
-  },
-  {
-    nombre: "Técnico de campo",
-    descripcion: "Ejecuta inspecciones, mantenimientos y órdenes asignadas en terreno.",
+    nombre: "Técnico",
+    descripcion: "Ejecuta inspecciones, mantenimientos, retiros/entregas y emite certificados sobre lo que tiene asignado.",
     permisos: [
       ...grants("CLIENTES", ["VER"], "ESTABLECIMIENTO_ASIGNADO"),
       ...grants("ESTABLECIMIENTOS", ["VER"], "ESTABLECIMIENTO_ASIGNADO"),
       ...grants("MATAFUEGOS", ["VER"], "ESTABLECIMIENTO_ASIGNADO"),
-      ...grants("MATAFUEGOS", ["EDITAR"], "PROPIO"),
+      ...grants("MATAFUEGOS", ["CREAR", "EDITAR"], "PROPIO"),
       ...grants("INSPECCIONES", ["VER", "CREAR", "EDITAR"], "PROPIO"),
-      // EDITAR:PROPIO además de VER/CREAR — sin esto, un técnico podría
-      // reportar una no conformidad (RF-07) pero nunca avanzar su propio
-      // estado (iniciar tratamiento, resolver), aunque sea suya o esté
-      // asignado a él. Asignar/verificar/cerrar siguen reservados a alcance
-      // TODAS en el servicio, independientemente de este permiso genérico.
       ...grants("NO_CONFORMIDADES", ["VER", "CREAR", "EDITAR"], "PROPIO"),
-      ...grants("MANTENIMIENTOS", ["VER"], "PROPIO"),
+      ...grants("MANTENIMIENTOS", ["VER", "CREAR", "EDITAR"], "PROPIO"),
       // VER:TODAS sobre el catálogo de servicios (no PROPIO: no hay noción de
       // "servicio propio") — sin esto, un técnico no podría ver qué
       // servicio/precio corresponde al ítem que agrega a su propia orden
       // asignada (RF-11), aunque tenga EDITAR:PROPIO sobre ORDENES_TRABAJO.
       ...grants("SERVICIOS_PRECIOS", ["VER"], "TODAS"),
-      ...grants("ORDENES_TRABAJO", ["VER", "EDITAR"], "PROPIO"),
+      ...grants("ORDENES_TRABAJO", ["VER", "CREAR", "EDITAR"], "PROPIO"),
       ...grants("RETIROS_ENTREGAS", ["VER", "CREAR", "EDITAR"], "PROPIO"),
-      ...grants("CERTIFICADOS", ["VER"], "PROPIO"),
+      // CREAR/EMITIR certificados (no sólo VER): un técnico tiene que poder
+      // emitir el certificado de su propia inspección sin depender de que
+      // el administrador lo haga por él en cada caso.
+      ...grants("CERTIFICADOS", ["VER", "CREAR", "EMITIR"], "PROPIO"),
       ...grants("NOTIFICACIONES", ["VER"], "PROPIO"),
-    ],
-  },
-  {
-    nombre: "Operador de taller",
-    descripcion: "Gestiona el ciclo de las unidades ingresadas al taller.",
-    permisos: [
-      ...grants("MATAFUEGOS", ["VER", "EDITAR"], "PROPIO"),
-      ...grants("SERVICIOS_PRECIOS", ["VER"], "TODAS"),
-      ...grants("ORDENES_TRABAJO", ["VER", "EDITAR"], "PROPIO"),
-      ...grants("MANTENIMIENTOS", ["VER", "EDITAR"], "PROPIO"),
-      // Sin CREAR: el operador de taller no retira unidades del cliente, las
-      // recibe (RF-12) — recibir un ingreso a taller no exige ser ya el
-      // responsable de custodia (ver ingresarATaller en
-      // retiros-entregas/service.ts), así que EDITAR:PROPIO alcanza.
-      ...grants("RETIROS_ENTREGAS", ["VER", "EDITAR"], "PROPIO"),
-      ...grants("CERTIFICADOS", ["VER"], "PROPIO"),
-    ],
-  },
-  {
-    nombre: "Comercial",
-    descripcion: "Gestión comercial de clientes, presupuestos y órdenes.",
-    permisos: [
-      ...grants("CLIENTES", ["VER", "CREAR", "EDITAR"], "TODAS"),
-      ...grants("ESTABLECIMIENTOS", ["VER", "CREAR", "EDITAR"], "TODAS"),
-      ...grants("SERVICIOS_PRECIOS", ["VER"], "TODAS"),
-      ...grants("ORDENES_TRABAJO", ["VER", "CREAR"], "TODAS"),
-      ...grants("CERTIFICADOS", ["VER"], "TODAS"),
-      ...grants("REPORTES", ["VER"], "TODAS"),
-    ],
-  },
-  {
-    nombre: "Facturación",
-    descripcion: "Visibilidad de datos comerciales y de precios para emitir comprobantes.",
-    permisos: [
-      ...grants("CLIENTES", ["VER"], "TODAS"),
-      ...grants("ORDENES_TRABAJO", ["VER"], "TODAS"),
-      ...grants("CERTIFICADOS", ["VER"], "TODAS"),
-      ...grants("SERVICIOS_PRECIOS", ["VER", "EDITAR"], "TODAS"),
-      ...grants("REPORTES", ["VER"], "TODAS"),
-    ],
-  },
-  {
-    nombre: "Cobranza",
-    descripcion: "Seguimiento de cuentas corrientes y cobranza de clientes.",
-    permisos: [
-      ...grants("CLIENTES", ["VER"], "TODAS"),
-      ...grants("ORDENES_TRABAJO", ["VER"], "TODAS"),
-      ...grants("REPORTES", ["VER"], "TODAS"),
-    ],
-  },
-  {
-    nombre: "Auditor",
-    descripcion: "Sólo lectura sobre toda la operación del tenant, para control y cumplimiento.",
-    permisos: [
-      ...TODOS_LOS_RECURSOS_TENANT.flatMap((recurso) => grants(recurso, ["VER"], "TODAS")),
-      ...grants("REPORTES", ["EXPORTAR"], "TODAS"),
+      ...grants("REPORTES", ["VER"], "PROPIO"),
     ],
   },
   {

@@ -33,7 +33,7 @@ describe("alta de tenant (RF-28)", () => {
     };
   }
 
-  it("crea el tenant, sus 9 roles por defecto y el usuario administrador con el rol correcto", async () => {
+  it("crea el tenant, sus 3 roles por defecto y el usuario administrador con el rol correcto", async () => {
     const input = buildInput();
     const { tenant, usuarioAdmin } = await createTenant(input, { usuarioId: null });
     createdTenantIds.push(tenant.id);
@@ -42,7 +42,7 @@ describe("alta de tenant (RF-28)", () => {
     expect(usuarioAdmin.email).toBe(input.adminEmail);
 
     const roles = await withTenant({ tenantId: tenant.id }, (tx) => tx.rol.findMany({ include: { permisos: true } }));
-    expect(roles).toHaveLength(9);
+    expect(roles).toHaveLength(3);
     expect(roles.map((r) => r.nombre)).toContain("Administrador de empresa");
 
     const rolAdmin = roles.find((r) => r.nombre === "Administrador de empresa")!;

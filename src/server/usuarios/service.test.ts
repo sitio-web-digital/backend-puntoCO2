@@ -76,16 +76,16 @@ describe("gestión de usuarios y roles (RF-27)", () => {
   }
 
   describe("catálogo de roles", () => {
-    it("lista los 9 roles por defecto sembrados al crear el tenant", async () => {
+    it("lista los 3 roles por defecto sembrados al crear el tenant", async () => {
       const { roles } = await setupBase();
-      expect(roles).toHaveLength(9);
+      expect(roles).toHaveLength(3);
       expect(roles.map((r) => r.nombre)).toContain("Administrador de empresa");
-      expect(roles.map((r) => r.nombre)).toContain("Técnico de campo");
+      expect(roles.map((r) => r.nombre)).toContain("Técnico");
     });
 
     it("un técnico de campo (sin permiso USUARIOS_ROLES) no puede listar roles", async () => {
       const { tenant } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       await expect(listRoles(tecnico)).rejects.toThrow(ForbiddenError);
     });
   });
@@ -93,7 +93,7 @@ describe("gestión de usuarios y roles (RF-27)", () => {
   describe("alta de usuarios", () => {
     it("invita un usuario nuevo con el rol indicado", async () => {
       const { adminActor, roles } = await setupBase();
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
 
       const usuario = await invitarUsuario(adminActor, {
         email: "nuevo.tecnico@example.com",
@@ -104,7 +104,7 @@ describe("gestión de usuarios y roles (RF-27)", () => {
       });
 
       expect(usuario.email).toBe("nuevo.tecnico@example.com");
-      expect(usuario.roles.map((r) => r.rol.nombre)).toEqual(["Técnico de campo"]);
+      expect(usuario.roles.map((r) => r.rol.nombre)).toEqual(["Técnico"]);
     });
 
     // Regresión: el hash de contraseña (argon2) no debe viajar nunca fuera de
@@ -115,7 +115,7 @@ describe("gestión de usuarios y roles (RF-27)", () => {
     // las rutas de API correspondientes.
     it("el hash de contraseña nunca viaja en la respuesta de alta ni en los listados", async () => {
       const { adminActor, roles } = await setupBase();
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
 
       const usuario = await invitarUsuario(adminActor, {
         email: "sin.hash@example.com",
@@ -132,7 +132,7 @@ describe("gestión de usuarios y roles (RF-27)", () => {
 
     it("rechaza un email ya usado en el mismo tenant", async () => {
       const { adminActor, roles } = await setupBase();
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
       await invitarUsuario(adminActor, {
         email: "repetido@example.com",
         password: "clave-de-prueba-segura-123",
@@ -165,10 +165,10 @@ describe("gestión de usuarios y roles (RF-27)", () => {
       ).rejects.toThrow(RolAsociadoInvalidoError);
     });
 
-    it("un rol sin permiso (Técnico de campo) no puede invitar usuarios", async () => {
+    it("un rol sin permiso (Técnico) no puede invitar usuarios", async () => {
       const { tenant, roles } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
 
       await expect(
         invitarUsuario(tecnico, {
@@ -185,7 +185,7 @@ describe("gestión de usuarios y roles (RF-27)", () => {
   describe("edición y bajas", () => {
     it("actualiza nombre y estado de un usuario", async () => {
       const { adminActor, roles } = await setupBase();
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
       const usuario = await invitarUsuario(adminActor, {
         email: "editar@example.com",
         password: "clave-de-prueba-segura-123",
@@ -231,8 +231,8 @@ describe("gestión de usuarios y roles (RF-27)", () => {
   describe("asignación de roles", () => {
     it("reemplaza el conjunto de roles asignados", async () => {
       const { adminActor, roles } = await setupBase();
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
-      const rolComercial = roles.find((r) => r.nombre === "Comercial")!;
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
+      const rolAdmin = roles.find((r) => r.nombre === "Administrador de empresa")!;
       const usuario = await invitarUsuario(adminActor, {
         email: "reasignar@example.com",
         password: "clave-de-prueba-segura-123",
@@ -241,13 +241,13 @@ describe("gestión de usuarios y roles (RF-27)", () => {
         rolIds: [rolTecnico.id],
       });
 
-      const actualizado = await asignarRoles(adminActor, usuario.id, { rolIds: [rolComercial.id] });
-      expect(actualizado.roles.map((r) => r.rol.nombre)).toEqual(["Comercial"]);
+      const actualizado = await asignarRoles(adminActor, usuario.id, { rolIds: [rolAdmin.id] });
+      expect(actualizado.roles.map((r) => r.rol.nombre)).toEqual(["Administrador de empresa"]);
     });
 
     it("no permite quitarle el rol de administrador al único administrador activo", async () => {
       const { adminActor, roles } = await setupBase();
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
 
       await expect(asignarRoles(adminActor, adminActor.usuarioId, { rolIds: [rolTecnico.id] })).rejects.toThrow(
         UltimoAdministradorInvalidoError,
@@ -258,7 +258,7 @@ describe("gestión de usuarios y roles (RF-27)", () => {
   describe("visibilidad y alcance", () => {
     it("un técnico de campo no puede listar usuarios", async () => {
       const { tenant } = await setupBase();
-      const tecnico = await crearActorConRol(tenant.id, "Técnico de campo");
+      const tecnico = await crearActorConRol(tenant.id, "Técnico");
       await expect(listUsuarios(tecnico)).rejects.toThrow(ForbiddenError);
     });
 
@@ -272,7 +272,7 @@ describe("gestión de usuarios y roles (RF-27)", () => {
   describe("listado paginado", () => {
     it("devuelve la primera página con el tamaño y el total correctos", async () => {
       const { adminActor, roles } = await setupBase();
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
       for (let i = 0; i < 5; i++) {
         await invitarUsuario(adminActor, {
           email: `usuario${i}@example.com`,
@@ -296,7 +296,7 @@ describe("gestión de usuarios y roles (RF-27)", () => {
 
     it("la segunda página trae registros distintos de la primera", async () => {
       const { adminActor, roles } = await setupBase();
-      const rolTecnico = roles.find((r) => r.nombre === "Técnico de campo")!;
+      const rolTecnico = roles.find((r) => r.nombre === "Técnico")!;
       for (let i = 0; i < 5; i++) {
         await invitarUsuario(adminActor, {
           email: `usuario${i}@example.com`,
@@ -328,10 +328,9 @@ describe("gestión de usuarios y roles (RF-27)", () => {
     // No se agrega el test de "un rol con alcance distinto de TODAS no ve nada"
     // (como en clientes/service.test.ts): en default-roles.ts ningún rol tiene
     // USUARIOS_ROLES:VER con alcance distinto de TODAS — sólo "Administrador de
-    // empresa" y "Auditor" lo tienen, ambos en TODAS. Los demás roles no tienen
-    // el permiso en absoluto, por lo que listUsuariosPaginado lanzaría
-    // ForbiddenError (vía requirePermission) en vez de devolver un listado
-    // vacío, que es un caso ya cubierto por el test existente "un técnico de
-    // campo no puede listar usuarios".
+    // empresa" lo tiene. El resto no tiene el permiso en absoluto, por lo que
+    // listUsuariosPaginado lanzaría ForbiddenError (vía requirePermission) en
+    // vez de devolver un listado vacío, que es un caso ya cubierto por el test
+    // existente "un técnico de campo no puede listar usuarios".
   });
 });
