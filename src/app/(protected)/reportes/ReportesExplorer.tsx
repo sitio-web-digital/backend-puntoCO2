@@ -19,7 +19,7 @@ const REPORTES: ReporteDef[] = [
   { id: "mantenimientos", label: "Historial de mantenimientos", url: "/api/reportes/mantenimientos", arrayKey: "datos", soportaFechas: true, soportaCsv: true },
   { id: "ordenes-por-estado", label: "Órdenes por estado", url: "/api/reportes/ordenes-por-estado", arrayKey: "porEstado", soportaFechas: true },
   { id: "unidades-retiradas", label: "Unidades retiradas", url: "/api/reportes/unidades-retiradas", arrayKey: "datos", soportaFechas: true, soportaCsv: true },
-  { id: "no-conformidades", label: "No conformidades", url: "/api/reportes/no-conformidades", arrayKey: "datos", soportaFechas: true, soportaCsv: true },
+  { id: "no-conformidades", label: "Observaciones", url: "/api/reportes/no-conformidades", arrayKey: "datos", soportaFechas: true, soportaCsv: true },
   { id: "certificados", label: "Certificados", url: "/api/reportes/certificados", arrayKey: "datos", soportaFechas: true, soportaCsv: true },
   { id: "notificaciones-fallidas", label: "Notificaciones fallidas", url: "/api/reportes/notificaciones-fallidas", arrayKey: "datos", soportaFechas: true, soportaCsv: true },
   { id: "productividad-por-tecnico", label: "Productividad por técnico", url: "/api/reportes/productividad-por-tecnico", arrayKey: "porTecnico", soportaFechas: true },

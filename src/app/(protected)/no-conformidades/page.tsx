@@ -23,7 +23,7 @@ export default async function NoConformidadesPage({ searchParams }: { searchPara
   return (
     <div className="stack">
       <div className="stack" style={{ gap: 6 }}>
-        <h1>No conformidades</h1>
+        <h1>Observaciones</h1>
         <p className="muted" style={{ maxWidth: "80ch" }}>
           Se generan manualmente o a partir de una inspección con resultado no conforme. El alta se hace desde la ficha del matafuego o vía
           la inspección correspondiente.
@@ -33,7 +33,7 @@ export default async function NoConformidadesPage({ searchParams }: { searchPara
       <div className="card" style={{ padding: 0 }}>
         {noConformidades.length === 0 ? (
           <p className="muted" style={{ padding: 16 }}>
-            No hay no conformidades registradas.
+            No hay observaciones registradas.
           </p>
         ) : (
           <>

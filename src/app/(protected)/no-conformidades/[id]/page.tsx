@@ -30,7 +30,7 @@ export default async function NoConformidadDetallePage({ params }: { params: Pro
     <div className="stack">
       <div className="stack" style={{ gap: 10 }}>
         <Link href="/no-conformidades" className="back-link">
-          ← No conformidades
+          ← Observaciones
         </Link>
         <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
           <h1>{nc.tipoDefecto}</h1>

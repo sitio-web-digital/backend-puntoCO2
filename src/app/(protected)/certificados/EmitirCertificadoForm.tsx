@@ -11,7 +11,7 @@ const TIPOS = [
   { value: "ACTA_RETIRO", label: "Acta de retiro" },
   { value: "ACTA_ENTREGA", label: "Acta de entrega" },
   { value: "INFORME_PRUEBA_HIDRAULICA", label: "Informe de prueba hidráulica" },
-  { value: "CONSTANCIA_NO_CONFORMIDAD", label: "Constancia de no conformidad" },
+  { value: "CONSTANCIA_NO_CONFORMIDAD", label: "Constancia de observación" },
   { value: "PLANILLA_DOTACION", label: "Planilla de dotación" },
   { value: "HISTORIAL_TECNICO", label: "Historial técnico" },
   { value: "CERTIFICADO_BAJA", label: "Certificado de baja" },

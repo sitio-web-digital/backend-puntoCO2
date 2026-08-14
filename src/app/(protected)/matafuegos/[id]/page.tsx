@@ -188,12 +188,12 @@ export default async function MatafuegoDetallePage({ params }: { params: Promise
 
       <div className="stack" style={{ gap: 12 }}>
         <div className="row-between" style={{ flexWrap: "wrap", gap: 12 }}>
-          <h2>No conformidades</h2>
+          <h2>Observaciones</h2>
           <NuevaNoConformidadForm matafuegoId={matafuego.id} />
         </div>
         <div className="card">
           {noConformidades.length === 0 ? (
-            <p className="muted">No tiene no conformidades registradas.</p>
+            <p className="muted">No tiene observaciones registradas.</p>
           ) : (
             <table>
               <thead>

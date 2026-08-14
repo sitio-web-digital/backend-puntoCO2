@@ -25,7 +25,7 @@ export function ResolverForm({ id }: { id: string }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.message ?? "No se pudo resolver la no conformidad.");
+        setError(data.message ?? "No se pudo resolver la observación.");
         return;
       }
       setAbierto(false);

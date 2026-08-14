@@ -21,7 +21,7 @@ const NAV_GROUPS: NavGroup[] = [
     links: [
       { href: "/clientes", label: "Clientes" },
       { href: "/matafuegos", label: "Matafuegos" },
-      { href: "/no-conformidades", label: "No conformidades" },
+      { href: "/no-conformidades", label: "Observaciones" },
       { href: "/mantenimientos", label: "Mantenimientos" },
     ],
   },

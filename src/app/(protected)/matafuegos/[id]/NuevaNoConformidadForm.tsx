@@ -33,7 +33,7 @@ export function NuevaNoConformidadForm({ matafuegoId }: { matafuegoId: string })
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.message ?? "No se pudo registrar la no conformidad.");
+        setError(data.message ?? "No se pudo registrar la observación.");
         return;
       }
       setOpen(false);
@@ -49,10 +49,10 @@ export function NuevaNoConformidadForm({ matafuegoId }: { matafuegoId: string })
   return (
     <>
       <button type="button" className="btn-secondary btn-sm" onClick={() => setOpen(true)}>
-        + No conformidad
+        + Observación
       </button>
 
-      <Drawer title="Nueva no conformidad" open={open} onClose={() => setOpen(false)}>
+      <Drawer title="Nueva observación" open={open} onClose={() => setOpen(false)}>
         <form onSubmit={handleSubmit} className="stack" style={{ gap: 16 }}>
           <div className="field" style={{ marginBottom: 0 }}>
             <label htmlFor="tipoDefecto">Tipo de defecto</label>
@@ -111,7 +111,7 @@ export function NuevaNoConformidadForm({ matafuegoId }: { matafuegoId: string })
 
           <div>
             <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? "Guardando..." : "Guardar no conformidad"}
+              {loading ? "Guardando..." : "Guardar observación"}
             </button>
           </div>
         </form>
