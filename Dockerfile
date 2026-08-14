@@ -9,6 +9,10 @@ WORKDIR /app
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
+# scripts/ tiene que estar ANTES de npm ci: el postinstall
+# (scripts/copy-qr-worker.js) corre como parte de npm ci y falla si el
+# archivo todavía no existe en la imagen en ese punto.
+COPY scripts ./scripts
 RUN npm ci
 
 COPY . .
