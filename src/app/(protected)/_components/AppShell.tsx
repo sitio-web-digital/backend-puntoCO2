@@ -179,6 +179,11 @@ export function AppShell({ user, tenantSlug, children }: { user: OwnProfile | nu
           </button>
           <span className="app-header-title">{pageTitle}</span>
           <div style={{ flex: 1 }} />
+          <Link href="/escanear" className="theme-toggle" title="Escanear QR" aria-label="Escanear QR de un matafuego">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7V4.5A1.5 1.5 0 0 1 4.5 3H7M17 3h2.5A1.5 1.5 0 0 1 21 4.5V7M21 17v2.5a1.5 1.5 0 0 1-1.5 1.5H17M7 21H4.5A1.5 1.5 0 0 1 3 19.5V17M3 12h18" />
+            </svg>
+          </Link>
           <button
             type="button"
             className="theme-toggle"

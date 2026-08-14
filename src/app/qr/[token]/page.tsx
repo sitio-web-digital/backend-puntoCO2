@@ -58,7 +58,7 @@ export default async function QrPublicoPage({ params }: { params: Promise<{ toke
         <div className="login-card-body">
           <div className="stack" style={{ gap: 10 }}>
             <span className="mono" style={{ fontSize: 11.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-3)" }}>
-              Matafuego
+              Matafuego · <span style={{ color: "var(--text-2)" }}>{vista.codigoInterno}</span>
             </span>
             <h1 style={{ fontSize: 25 }}>{vista.tipo.replace(/_/g, " ")}</h1>
             <span className={`badge badge-${vista.estado.toLowerCase()}`} style={{ width: "fit-content" }}>
@@ -79,28 +79,36 @@ export default async function QrPublicoPage({ params }: { params: Promise<{ toke
                 {vista.capacidadNominal ?? "No especificada"}
               </span>
             </div>
-            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
-              <span className="muted">Próxima inspección</span>
-              <span className="mono" style={{ fontWeight: 500 }}>
-                {formatFecha(vista.proximaInspeccion)}
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)", gap: 16 }}>
+              <span className="muted">Inspección</span>
+              <span className="mono" style={{ fontWeight: 500, textAlign: "right", fontSize: 12.5 }}>
+                últ. {formatFecha(vista.fechaUltimaInspeccion)}
+                <br />
+                próx. {formatFecha(vista.proximaInspeccion)}
               </span>
             </div>
-            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
-              <span className="muted">Próximo mantenimiento</span>
-              <span className="mono" style={{ fontWeight: 500 }}>
-                {formatFecha(vista.proximoMantenimiento)}
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)", gap: 16 }}>
+              <span className="muted">Mantenimiento</span>
+              <span className="mono" style={{ fontWeight: 500, textAlign: "right", fontSize: 12.5 }}>
+                últ. {formatFecha(vista.fechaUltimoMantenimiento)}
+                <br />
+                próx. {formatFecha(vista.proximoMantenimiento)}
               </span>
             </div>
-            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
-              <span className="muted">Próxima recarga</span>
-              <span className="mono" style={{ fontWeight: 500 }}>
-                {formatFecha(vista.proximaRecarga)}
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)", gap: 16 }}>
+              <span className="muted">Recarga</span>
+              <span className="mono" style={{ fontWeight: 500, textAlign: "right", fontSize: 12.5 }}>
+                últ. {formatFecha(vista.fechaUltimaRecarga)}
+                <br />
+                próx. {formatFecha(vista.proximaRecarga)}
               </span>
             </div>
-            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
-              <span className="muted">Próxima prueba hidráulica</span>
-              <span className="mono" style={{ fontWeight: 500 }}>
-                {formatFecha(vista.proximaPruebaHidraulica)}
+            <div className="row-between" style={{ padding: "13px 0", borderBottom: "1px solid var(--border)", gap: 16 }}>
+              <span className="muted">Prueba hidráulica</span>
+              <span className="mono" style={{ fontWeight: 500, textAlign: "right", fontSize: 12.5 }}>
+                últ. {formatFecha(vista.fechaUltimaPruebaHidraulica)}
+                <br />
+                próx. {formatFecha(vista.proximaPruebaHidraulica)}
               </span>
             </div>
           </div>

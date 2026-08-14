@@ -43,6 +43,9 @@ COPY --from=builder /app/next.config.ts ./next.config.ts
 # (no queda inlineado en .next), así que necesita el árbol de fuentes real
 # presente en el runner, no sólo el build compilado.
 COPY --from=builder /app/src ./src
+# next start sirve public/ leyendo el disco directamente (no queda empaquetado
+# en .next tampoco) — mismo motivo que src/ arriba.
+COPY --from=builder /app/public ./public
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 

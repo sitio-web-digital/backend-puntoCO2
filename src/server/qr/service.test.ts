@@ -8,7 +8,7 @@ import { createEstablecimiento } from "../establecimientos/service";
 import { createMatafuego, darDeBajaMatafuego } from "../matafuegos/service";
 import { hashPassword } from "../auth/password";
 import { ForbiddenError } from "../rbac/permissions";
-import { resolveQrPublico, regenerarQrMatafuego, QrNotFoundError } from "./service";
+import { resolveQrPublico, resolveMatafuegoParaEscaneo, regenerarQrMatafuego, QrNotFoundError } from "./service";
 
 describe("identificación por QR (RF-05)", () => {
   const createdTenantIds: string[] = [];
@@ -107,13 +107,18 @@ describe("identificación por QR (RF-05)", () => {
 
     expect(vista).toEqual({
       matafuegoId: matafuego.id,
+      codigoInterno: matafuego.codigoInterno,
       tipo: "PORTATIL",
       agenteExtintor: "CO2",
       capacidadNominal: null,
       estado: "PENDIENTE_DE_CONTROL",
+      fechaUltimaInspeccion: null,
       proximaInspeccion: null,
+      fechaUltimoMantenimiento: null,
       proximoMantenimiento: null,
+      fechaUltimaRecarga: null,
       proximaRecarga: null,
+      fechaUltimaPruebaHidraulica: null,
       proximaPruebaHidraulica: null,
     });
 
@@ -134,6 +139,25 @@ describe("identificación por QR (RF-05)", () => {
 
   it("un token que no existe da un error genérico (no revela si el tenant existe)", async () => {
     await expect(resolveQrPublico("token-que-no-existe-nunca")).rejects.toThrow(QrNotFoundError);
+  });
+
+  describe("escáner in-app (celular ya logueado)", () => {
+    it("resuelve el token al matafuegoId cuando pertenece al tenant del actor", async () => {
+      const { adminActor, matafuego } = await setupMatafuego();
+      await expect(resolveMatafuegoParaEscaneo(adminActor, matafuego.qrToken)).resolves.toEqual({ matafuegoId: matafuego.id });
+    });
+
+    it("un token que no existe da QrNotFoundError", async () => {
+      const { adminActor } = await setupMatafuego();
+      await expect(resolveMatafuegoParaEscaneo(adminActor, "token-que-no-existe-nunca")).rejects.toThrow(QrNotFoundError);
+    });
+
+    it("un token de OTRO tenant también da QrNotFoundError (RLS), sin distinguir de 'no existe'", async () => {
+      const { matafuego: matafuegoDeB } = await setupMatafuego();
+      const { adminActor: actorA } = await setupMatafuego();
+
+      await expect(resolveMatafuegoParaEscaneo(actorA, matafuegoDeB.qrToken)).rejects.toThrow(QrNotFoundError);
+    });
   });
 
   it("regenera el QR: el token viejo deja de resolver, el nuevo sí funciona", async () => {

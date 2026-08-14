@@ -23,13 +23,18 @@ export class QrNotFoundError extends Error {
  */
 export interface QrPublicView {
   matafuegoId: string;
+  codigoInterno: string;
   tipo: TipoMatafuego;
   agenteExtintor: AgenteExtintor;
   capacidadNominal: string | null;
   estado: EstadoMatafuego;
+  fechaUltimaInspeccion: Date | null;
   proximaInspeccion: Date | null;
+  fechaUltimoMantenimiento: Date | null;
   proximoMantenimiento: Date | null;
+  fechaUltimaRecarga: Date | null;
   proximaRecarga: Date | null;
+  fechaUltimaPruebaHidraulica: Date | null;
   proximaPruebaHidraulica: Date | null;
 }
 
@@ -39,13 +44,18 @@ export async function resolveQrPublico(token: string): Promise<QrPublicView> {
       where: { qrToken: token },
       select: {
         id: true,
+        codigoInterno: true,
         tipo: true,
         agenteExtintor: true,
         capacidadNominal: true,
         estado: true,
+        fechaUltimaInspeccion: true,
         proximaInspeccion: true,
+        fechaUltimoMantenimiento: true,
         proximoMantenimiento: true,
+        fechaUltimaRecarga: true,
         proximaRecarga: true,
+        fechaUltimaPruebaHidraulica: true,
         proximaPruebaHidraulica: true,
       },
     }),
@@ -55,13 +65,18 @@ export async function resolveQrPublico(token: string): Promise<QrPublicView> {
 
   return {
     matafuegoId: matafuego.id,
+    codigoInterno: matafuego.codigoInterno,
     tipo: matafuego.tipo,
     agenteExtintor: matafuego.agenteExtintor,
     capacidadNominal: matafuego.capacidadNominal,
     estado: matafuego.estado,
+    fechaUltimaInspeccion: matafuego.fechaUltimaInspeccion,
     proximaInspeccion: matafuego.proximaInspeccion,
+    fechaUltimoMantenimiento: matafuego.fechaUltimoMantenimiento,
     proximoMantenimiento: matafuego.proximoMantenimiento,
+    fechaUltimaRecarga: matafuego.fechaUltimaRecarga,
     proximaRecarga: matafuego.proximaRecarga,
+    fechaUltimaPruebaHidraulica: matafuego.fechaUltimaPruebaHidraulica,
     proximaPruebaHidraulica: matafuego.proximaPruebaHidraulica,
   };
 }
@@ -78,6 +93,19 @@ export async function resolveMatafuegoIdYTenant(token: string): Promise<{ matafu
   );
   if (!matafuego) return null;
   return { matafuegoId: matafuego.id, tenantId: matafuego.tenantId };
+}
+
+/**
+ * Resuelve un token de QR a un matafuegoId, pero sólo si pertenece al tenant
+ * del actor (para el escáner in-app, RF-05): a diferencia de
+ * `resolveMatafuegoIdYTenant`, corre con RLS normal en vez de bypassRls, así
+ * que una unidad de otro tenant simplemente no aparece — no se distingue
+ * "no existe" de "es de otra empresa", para no filtrar esa información.
+ */
+export async function resolveMatafuegoParaEscaneo(actor: TenantActor, token: string): Promise<{ matafuegoId: string }> {
+  const matafuego = await withTenant({ tenantId: actor.tenantId }, (tx) => tx.matafuego.findUnique({ where: { qrToken: token }, select: { id: true } }));
+  if (!matafuego) throw new QrNotFoundError();
+  return { matafuegoId: matafuego.id };
 }
 
 /** Emite un QR nuevo e invalida el anterior (sticker perdido/dañado). Requiere

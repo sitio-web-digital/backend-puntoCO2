@@ -8,6 +8,9 @@ node_modules/
 .next/
 out/
 
+# Generado por postinstall (scripts/copy-qr-worker.js) desde node_modules
+public/qr-scanner-worker.min.js
+
 # Env
 .env
 .env*.local
