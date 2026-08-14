@@ -4,6 +4,7 @@ import { requireSuperAdmin } from "@/server/auth/current-user";
 import { getTenantPlataforma, TenantNotFoundError } from "@/server/platform/service";
 import { EstadoBadge } from "@/app/(protected)/_lib/estado-badge";
 import { ActionButton } from "@/app/(protected)/_components/ActionButton";
+import { EditarWhatsappForm } from "./EditarWhatsappForm";
 
 export default async function EmpresaDetallePage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requireSuperAdmin();
@@ -73,6 +74,7 @@ export default async function EmpresaDetallePage({ params }: { params: Promise<{
               {tenant._count.matafuegos}
             </div>
           </div>
+          <EditarWhatsappForm tenantId={tenant.id} valorActual={tenant.whatsappFromNumber} />
         </div>
       </div>
 

@@ -54,6 +54,13 @@ model Tenant {
   // de pasar a SUSPENDIDO. Se limpia al volver a ACTIVO.
   vencidoDesde  DateTime?
   limites   Json? // { maxUsuarios, maxEquipos, almacenamientoMB, funcionesHabilitadas: [] }
+  // Remitente de WhatsApp de este tenant (E.164, ej. "+5491155551234"), dado
+  // de alta en la cuenta Twilio de la plataforma (ver
+  // src/server/notificaciones/twilio-sender.ts). No es un secreto — las
+  // credenciales de Twilio son de plataforma, sólo por variable de entorno,
+  // nunca por tenant. Null = este tenant todavía no tiene WhatsApp
+  // configurado; el envío cae al canal alternativo (RF-19) automáticamente.
+  whatsappFromNumber String?
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 

@@ -11,8 +11,10 @@ import {
   reactivarTenantPlataforma,
   cambiarEstadoTenantPlataforma,
   marcarPagoTenant,
+  actualizarWhatsappTenant,
   resumenPlataforma,
   TenantNotFoundError,
+  WhatsappNumeroInvalidoError,
   type PlatformActor,
 } from "./service";
 import { login } from "../auth/login-service";
@@ -191,5 +193,45 @@ describe("panel de plataforma (superadmin SaaS)", () => {
 
     expect(resumen.totalEmpresas).toBeGreaterThanOrEqual(1);
     expect(resumen.conteoPorEstado.SUSPENDIDO).toBeGreaterThanOrEqual(1);
+  });
+
+  describe("actualizarWhatsappTenant", () => {
+    it("guarda el número normalizado a E.164", async () => {
+      const { tenant } = await crearTenantDePrueba();
+
+      const actualizado = await actualizarWhatsappTenant(superAdminActor, tenant.id, "+54 9 11 5555-1234");
+
+      expect(actualizado.whatsappFromNumber).toBe("+5491155551234");
+    });
+
+    it("rechaza un número que no es un WhatsApp válido", async () => {
+      const { tenant } = await crearTenantDePrueba();
+
+      await expect(actualizarWhatsappTenant(superAdminActor, tenant.id, "no-es-un-numero")).rejects.toThrow(WhatsappNumeroInvalidoError);
+    });
+
+    it("null o vacío limpia el número configurado", async () => {
+      const { tenant } = await crearTenantDePrueba();
+      await actualizarWhatsappTenant(superAdminActor, tenant.id, "+5491155551234");
+
+      const limpiado = await actualizarWhatsappTenant(superAdminActor, tenant.id, null);
+
+      expect(limpiado.whatsappFromNumber).toBeNull();
+    });
+
+    it("lanza TenantNotFoundError sobre un tenant inexistente", async () => {
+      await expect(actualizarWhatsappTenant(superAdminActor, "no-existe", "+5491155551234")).rejects.toThrow(TenantNotFoundError);
+    });
+
+    it("registra auditoría del cambio", async () => {
+      const { tenant } = await crearTenantDePrueba();
+
+      await actualizarWhatsappTenant(superAdminActor, tenant.id, "+5491155551234");
+
+      const logs = await withTenant({ tenantId: null, bypassRls: true }, (tx) =>
+        tx.auditLog.findMany({ where: { entidad: "Tenant", entidadId: tenant.id, accion: "UPDATE" } }),
+      );
+      expect(logs.some((l) => JSON.stringify(l.valorNuevo).includes("+5491155551234"))).toBe(true);
+    });
   });
 });

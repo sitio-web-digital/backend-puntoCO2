@@ -220,15 +220,20 @@ describe("notificaciones automáticas (RF-19)", () => {
     });
 
     it("usa el canal alternativo cuando el primario falla (fallback)", async () => {
+      // Primario WHATSAPP sin destinatario (falla rápido y determinístico,
+      // sin depender de que haya credenciales de Twilio configuradas en el
+      // entorno de test); alternativo EMAIL con destinatario válido, que sí
+      // "envía" vía el sender de log (ver TwilioWhatsAppSender/LogCanalSender
+      // en notificaciones/channels.ts y twilio-sender.ts).
       const { tenant, adminActor } = await setupBase();
       await withTenant({ tenantId: tenant.id }, (tx) =>
         tx.notificacion.create({
           data: {
             tenantId: tenant.id,
             evento: "CERTIFICADO_EMITIDO",
-            canal: "EMAIL",
-            canalAlternativo: "WHATSAPP",
-            destinatarioWhatsapp: "+5491100000000",
+            canal: "WHATSAPP",
+            canalAlternativo: "EMAIL",
+            destinatarioEmail: "cliente@example.com",
             entidadTipo: "Certificado",
             entidadId: "cert-1",
             plantilla: "certificado_emitido",

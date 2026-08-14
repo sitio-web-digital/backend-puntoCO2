@@ -1,6 +1,9 @@
 import type { CanalNotificacion } from "@prisma/client";
+import { TwilioWhatsAppSender } from "./twilio-sender";
 
 export interface EnvioNotificacion {
+  tenantId: string;
+  destinatarioNombre: string | null;
   destinatarioEmail: string | null;
   destinatarioWhatsapp: string | null;
   plantilla: string;
@@ -14,19 +17,19 @@ export interface CanalSender {
 }
 
 /**
- * No hay credenciales de ningún proveedor real configuradas todavía (SMTP,
- * WhatsApp Business API, etc.) — CLAUDE.md prohíbe hardcodear secretos, así
- * que este sender es el que se usa mientras no existan esas variables de
- * entorno. Simula el resultado según si el dato de contacto necesario está
- * presente, que es exactamente lo que valida el criterio de aceptación
- * "contacto incompleto ⇒ se registra el error" — no hace falta un proveedor
- * real para que ese comportamiento sea correcto y testeable.
+ * No hay credenciales de ningún proveedor real de EMAIL configuradas
+ * todavía (Resend/SendGrid/etc.) — CLAUDE.md prohíbe hardcodear secretos,
+ * así que este sender es el que se usa mientras no existan esas variables
+ * de entorno. Simula el resultado según si el dato de contacto necesario
+ * está presente, que es exactamente lo que valida el criterio de
+ * aceptación "contacto incompleto ⇒ se registra el error" — no hace falta
+ * un proveedor real para que ese comportamiento sea correcto y testeable.
  *
- * Reemplazar por un sender real (ej. Resend/SendGrid para EMAIL, WhatsApp
- * Business API para WHATSAPP) es cuestión de implementar esta misma interfaz
- * leyendo las credenciales desde variables de entorno y registrar esa
- * implementación en `CANAL_SENDERS` — el resto del motor de notificaciones
- * (dedup, reintentos, fallback) no cambia.
+ * Reemplazar por un sender real es cuestión de implementar esta misma
+ * interfaz leyendo las credenciales desde variables de entorno y
+ * registrar esa implementación en `CANAL_SENDERS` — el resto del motor de
+ * notificaciones (dedup, reintentos, fallback) no cambia. WHATSAPP ya
+ * sigue ese patrón: ver `TwilioWhatsAppSender` en `./twilio-sender.ts`.
  */
 class LogCanalSender implements CanalSender {
   constructor(private readonly campo: "destinatarioEmail" | "destinatarioWhatsapp") {}
@@ -43,7 +46,7 @@ class LogCanalSender implements CanalSender {
 
 const CANAL_SENDERS: Record<CanalNotificacion, CanalSender> = {
   EMAIL: new LogCanalSender("destinatarioEmail"),
-  WHATSAPP: new LogCanalSender("destinatarioWhatsapp"),
+  WHATSAPP: new TwilioWhatsAppSender(),
   // TELEFONO es una preferencia de contacto de Cliente (RF-01), no un canal
   // de envío automatizado — RF-19 sólo pide "email, WhatsApp y canales
   // futuros configurables". Si se intenta usar, falla explícitamente en vez

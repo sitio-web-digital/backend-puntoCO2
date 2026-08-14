@@ -4,6 +4,7 @@ import { withTenant } from "../db/with-tenant";
 import { writeAudit } from "../audit/log";
 import { paginationArgs, toPaginatedResult, type PaginationParams } from "../db/pagination";
 import { createTenant, createTenantSchema, type CreateTenantInput } from "../tenants/provisioning";
+import { normalizarE164 } from "../notificaciones/twilio-sender";
 import { aplicarVencimientosPendientes, aplicarVencimientoTenant, DURACION_CICLO_PAGO_DIAS } from "./vencimientos";
 
 /** Actor de las operaciones de plataforma: siempre el Superadministrador SaaS
@@ -102,6 +103,44 @@ async function cambiarEstadoTenant(actor: PlatformActor, id: string, nuevoEstado
       valorAnterior: { estado: existing.estado },
       valorNuevo: { estado: nuevoEstado },
       motivo,
+    });
+
+    return actualizado;
+  });
+}
+
+export class WhatsappNumeroInvalidoError extends Error {
+  constructor(numero: string) {
+    super(`"${numero}" no es un número de WhatsApp válido (formato E.164, ej: +5491155551234)`);
+    this.name = "WhatsappNumeroInvalidoError";
+  }
+}
+
+/** Remitente de WhatsApp del tenant (ver src/server/notificaciones/twilio-sender.ts):
+ * el número ya tiene que estar dado de alta como sender de WhatsApp en la
+ * cuenta Twilio de la plataforma (fuera de esta app). `null`/vacío limpia
+ * la configuración, dejando que ese canal caiga al alternativo (RF-19). */
+export async function actualizarWhatsappTenant(actor: PlatformActor, id: string, whatsappFromNumberCrudo: string | null) {
+  const crudo = whatsappFromNumberCrudo?.trim();
+  const whatsappFromNumber = crudo ? normalizarE164(crudo) : null;
+  if (crudo && !whatsappFromNumber) {
+    throw new WhatsappNumeroInvalidoError(crudo);
+  }
+
+  return withTenant({ tenantId: null, bypassRls: true }, async (tx) => {
+    const existing = await tx.tenant.findUnique({ where: { id } });
+    if (!existing) throw new TenantNotFoundError(id);
+
+    const actualizado = await tx.tenant.update({ where: { id }, data: { whatsappFromNumber } });
+
+    await writeAudit(tx, {
+      tenantId: id,
+      usuarioId: actor.usuarioId,
+      accion: "UPDATE",
+      entidad: "Tenant",
+      entidadId: id,
+      valorAnterior: { whatsappFromNumber: existing.whatsappFromNumber },
+      valorNuevo: { whatsappFromNumber },
     });
 
     return actualizado;

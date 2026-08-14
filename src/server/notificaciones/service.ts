@@ -99,10 +99,27 @@ export async function generarNotificacion(tx: TenantTx, params: GenerarNotificac
   }
 }
 
-async function intentarEnviar(tx: TenantTx, notificacion: { id: string; canal: CanalNotificacion; canalAlternativo: CanalNotificacion | null; destinatarioEmail: string | null; destinatarioWhatsapp: string | null; plantilla: string; payload: Prisma.JsonValue; intentos: number; maxIntentos: number }) {
+async function intentarEnviar(
+  tx: TenantTx,
+  notificacion: {
+    id: string;
+    tenantId: string;
+    canal: CanalNotificacion;
+    canalAlternativo: CanalNotificacion | null;
+    destinatarioNombre: string | null;
+    destinatarioEmail: string | null;
+    destinatarioWhatsapp: string | null;
+    plantilla: string;
+    payload: Prisma.JsonValue;
+    intentos: number;
+    maxIntentos: number;
+  },
+) {
   await tx.notificacion.update({ where: { id: notificacion.id }, data: { estado: "EN_PROCESO", intentos: { increment: 1 } } });
 
   const envio = {
+    tenantId: notificacion.tenantId,
+    destinatarioNombre: notificacion.destinatarioNombre,
     destinatarioEmail: notificacion.destinatarioEmail,
     destinatarioWhatsapp: notificacion.destinatarioWhatsapp,
     plantilla: notificacion.plantilla,
